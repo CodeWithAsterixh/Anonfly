@@ -1,7 +1,10 @@
-.DS_Store
-.env
-/node_modules/
+# exclude node_modules directory
+/node_modules
 
-# React Router
-/.react-router/
-/build/
+# exclude log files
+*.log
+
+# exclude environment variable files
+.env
+/.idea/
+/kadian-inventory/.idea/
