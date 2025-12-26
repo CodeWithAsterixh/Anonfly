@@ -1,0 +1,135 @@
+{
+  "project_name": "Anonfly (Chat Application Backend)",
+  "overview": "Anonfly is a real-time chat application backend built with Node.js, Express, and TypeScript. It provides functionalities for user authentication, chatroom management, and real-time messaging via WebSockets. The application emphasizes security, structured logging, and a modular architecture.",
+  "core_technologies": [
+    "Express.js",
+    "WebSockets (ws library)",
+    "MongoDB (Mongoose ODM)",
+    "TypeScript",
+    "Pino (with pino-http)",
+    "Helmet",
+    "CORS",
+    "JSON Web Tokens (JWT)",
+    "bcrypt",
+    "dotenv"
+  ],
+  "project_structure": {
+    "app/": {
+      "description": "Contains the main application logic.",
+      "files": {
+        "index.ts": "The primary entry point of the application. It initializes the Express server, configures middleware (security, logging, CORS, body parsers), sets up API routes, and establishes the WebSocket server. It also handles WebSocket connections, message processing, and client management within chatrooms."
+      },
+      "subdirectories": {
+        "app/routes/": {
+          "description": "Organizes API endpoints into logical groups.",
+          "subdirectories": {
+            "app/routes/auth/": {
+              "description": "Handles user authentication.",
+              "files": {
+                "getUser.ts": "Route for retrieving user information.",
+                "login.ts": "Route for user authentication and token generation."
+              }
+            },
+            "app/routes/chatroom/": {
+              "description": "Manages chatroom operations.",
+              "files": {
+                "chatroomlist.ts": "Route for listing available chatrooms.",
+                "createChatroom.ts": "Route for creating new chatrooms.",
+                "deleteChatroom.ts": "Route for deleting chatrooms.",
+                "deleteMessage.ts": "Route for deleting messages within a chatroom.",
+                "getChatroomDetails.ts": "Route for fetching details of a specific chatroom.",
+                "getChatroomMessages.ts": "Route for retrieving messages from a chatroom.",
+                "joinChatroom.ts": "Route for users to join a chatroom.",
+                "leaveChatroom.ts": "Route for users to leave a chatroom."
+              }
+            },
+            "app/routes/user/": {
+              "description": "Manages user operations.",
+              "files": {
+                "createUser.ts": "Route for registering new users.",
+                "deleteUser.ts": "Route for deleting user accounts."
+              }
+            }
+          }
+        }
+      }
+    },
+    "lib/": {
+      "description": "Houses reusable libraries, utilities, and middleware.",
+      "subdirectories": {
+        "lib/constants/": {
+          "files": {
+            "env.ts": "Centralized configuration for environment variables, ensuring type safety and default values."
+          }
+        },
+        "lib/handlers/": {
+          "files": {
+            "getDbConnection.ts": "Likely handles the establishment and management of database connections."
+          }
+        },
+        "lib/helpers/": {
+          "description": "Provides various helper functions.",
+          "files": {
+            "connect-db-users.ts": "Database connection related helper.",
+            "connect-mongo-db.ts": "Database connection related helper.",
+            "flatten-to-dot-notation.ts": "A utility for transforming objects, possibly for database queries or updates.",
+            "hash.ts": "Utility for cryptographic hashing, primarily used for password storage.",
+            "messageCache.ts": "Implements a caching mechanism for chat messages to improve performance.",
+            "normalizeError.ts": "Standardizes error objects for consistent error handling and responses.",
+            "ping.ts": "A utility to check external network connectivity.",
+            "use-mongo-db.ts": "Database connection related helper."
+          }
+        },
+        "lib/middlewares/": {
+          "description": "Custom Express middleware functions.",
+          "files": {
+            "logger.ts": "(Potentially deprecated or supplementary to pino-http) A middleware for logging requests.",
+            "routeHandler.ts": "A custom utility to streamline the registration of routes with the Express application.",
+            "securityHeaders.ts": "Integrates `helmet` to set various HTTP headers for enhanced security (e.g., CSP, X-Frame-Options, HSTS).",
+            "verifyToken.ts": "Middleware to validate JWTs for protected routes, ensuring only authenticated users can access certain resources.",
+            "withErrorHandling.ts": "A higher-order function that wraps route handlers to provide centralized error handling and connectivity checks."
+          }
+        },
+        "lib/models/": {
+          "description": "Defines Mongoose schemas for the application's data models.",
+          "files": {
+            "chatRoom.ts": "Mongoose schema for chatroom entities, including messages.",
+            "message.ts": "Mongoose schema for individual chat messages.",
+            "user.ts": "Mongoose schema for user entities, including authentication details."
+          }
+        },
+        "lib/types/": {
+          "files": {
+            "express.d.ts": "Custom TypeScript declaration file for extending Express types."
+          }
+        },
+        "lib/utils/": {
+          "files": {
+            "removeFromObjectArray.ts": "A utility function for manipulating arrays of objects."
+          }
+        }
+      }
+    },
+    "types/": {
+      "files": {
+        "index.d.ts": "Global TypeScript declaration file containing custom types and interfaces used throughout the application (e.g., `Pagination`, `RouteEvent`, `generalResponse`, `RouteConfig`)."
+      }
+    }
+  },
+  "key_features": [
+    "User Authentication: Secure user login and registration using JWTs and bcrypt.",
+    "Chatroom Management: Create, join, leave, and delete chatrooms.",
+    "Real-time Messaging: Bidirectional communication between clients and the server using WebSockets for instant message delivery.",
+    "Message Persistence: Chat messages are stored in MongoDB.",
+    "Message Caching: Improves performance by caching frequently accessed messages.",
+    "Error Handling: Centralized error handling with `withErrorHandling` middleware.",
+    "Security: Comprehensive security measures including Helmet for HTTP headers, CORS configuration, and token-based authentication.",
+    "Structured Logging: Utilizes Pino for efficient and structured logging, aiding in debugging and monitoring.",
+    "Health Checks: A `/healtz` endpoint to monitor the application's operational status."
+  ],
+  "development_and_deployment": {
+    "development_script": "npm run dev (uses `nodemon` and `ts-node` for live reloading during development).",
+    "start_script": "npm run start (performs type checking and then runs the application).",
+    "type_checking": "npm run typecheck (uses `tsc --noEmit` to check TypeScript types)."
+  }
+}

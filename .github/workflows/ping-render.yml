@@ -1,0 +1,12 @@
+name: Ping Render
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -s https://anonfly-server-1.onrender.com
+      - run: curl -s https://anonfly-server-2.onrender.com
+      - run: curl -s https://anonfly-server-3.onrender.com
+      - run: curl -s https://anonfly-server-4.onrender.com

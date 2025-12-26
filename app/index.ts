@@ -34,6 +34,9 @@ import loginRoute from "./routes/auth/login.ts";
 import getUserRoute from "./routes/auth/getUser.ts";
 import deleteUserRoute from "./routes/user/deleteUser.ts";
 
+import homeRoute from "./routes/homeRoute.ts";
+import healthzRoute from "./routes/healthzRoute.ts";
+
 // App setup
 const app = express();
 const PORT = env.PORT;
@@ -87,20 +90,11 @@ const router = useRouter(app);
 
 app.use('/', chatroomListRouter);
 
+
+
 // Routes
-// Home route with API documentation
-router({
-  method: "get",
-  path: "/",
-  handler: withErrorHandling(async () => {
-    return {
-      message: "Hello World",
-      statusCode: 200,
-      success: true,
-      status: "good",
-    };
-  }),
-});
+router(homeRoute);
+router(healthzRoute);
 
 router(createChatroomRoute);
 
