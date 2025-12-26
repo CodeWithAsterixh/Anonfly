@@ -2,7 +2,7 @@
   "name": "anonfly",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.ts",
+  "main": "app/index.ts",
   "scripts": {
     "dev": "nodemon --exec ts-node app/index.ts",
     "start": "pnpm run typecheck && ts-node app/index.ts",
