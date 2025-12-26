@@ -39,7 +39,7 @@ import healthzRoute from "./routes/healthzRoute.ts";
 
 // App setup
 const app = express();
-const PORT = env.PORT;
+const PORT = process.env.PORT || 5000;
 
 // Configure structured logger
 const logger = pino({
