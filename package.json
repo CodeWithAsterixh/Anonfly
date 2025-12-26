@@ -5,7 +5,8 @@
   "main": "app/index.ts",
   "scripts": {
     "dev": "nodemon --exec ts-node app/index.ts",
-    "start": "pnpm run typecheck && ts-node app/index.ts",
+    "build": "tsc",
+    "start": "pnpm run typecheck && node --loader ts-node app/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

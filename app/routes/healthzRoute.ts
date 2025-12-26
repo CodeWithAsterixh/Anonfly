@@ -1,5 +1,5 @@
 import withErrorHandling from "../../lib/middlewares/withErrorHandling.ts";
-import { RouteConfig } from "../../types/index.js";
+import type { RouteConfig } from "../../types/index.d.ts";
 
 const healthzRoute: Omit<RouteConfig, 'app'> = {
   method: "get",

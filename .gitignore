@@ -4,6 +4,8 @@
 # exclude log files
 *.log
 
+/dist
+
 # exclude environment variable files
 .env
 /.idea/
