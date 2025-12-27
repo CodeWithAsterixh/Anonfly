@@ -28,6 +28,7 @@ import getChatroomMessagesRoute from "./routes/chatroom/getChatroomMessages";
 import joinChatroomRoute from "./routes/chatroom/joinChatroom";
 import deleteChatroomRoute from "./routes/chatroom/deleteChatroom";
 import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
+import editChatroomRoute from "./routes/chatroom/editChatroom";
 import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
 import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
 import createUserRoute from "./routes/user/createUser";
@@ -116,6 +117,7 @@ router(joinChatroomRoute);
 router(getChatroomDetailsRoute);
 
 router(deleteChatroomRoute);
+router(editChatroomRoute);
 
 router(leaveChatroomRoute);
 
