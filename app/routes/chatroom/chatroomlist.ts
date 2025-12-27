@@ -1,6 +1,7 @@
+/// <reference path="../../../lib/types/express.d.ts" />
 import { Router } from 'express';
-import ChatRoom from '../../../lib/models/chatRoom.ts';
-import type { IParticipant } from '../../../lib/models/chatRoom.ts';
+import ChatRoom from '../../../lib/models/chatRoom';
+import type { IParticipant } from '../../../lib/models/chatRoom';
 
 const router = Router();
 

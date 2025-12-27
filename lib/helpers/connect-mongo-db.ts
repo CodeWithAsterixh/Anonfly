@@ -1,7 +1,7 @@
 // filepath: c:\Users\Asterixh\Desktop\elberythstore\server\utils\connect-mongo-db.ts
 import mongoose from "mongoose";
-import checkHttpConnectivity from "./ping.ts";
-import env from "../constants/env.ts";
+import checkHttpConnectivity from "./ping";
+import env from "../constants/env";
 export default async function connectMongoDb(db_name="") {
   const isOnline = await checkHttpConnectivity();
   const rawUri = env.MONGODB_URI;

@@ -1,7 +1,7 @@
-import ChatRoom from '../../../lib/models/chatRoom.ts';
-import withErrorHandling from '../../../lib/middlewares/withErrorHandling.ts';
-import type { RouteConfig } from '../../../types/index.d.ts';
-import { verifyToken } from '../../../lib/middlewares/verifyToken.ts';
+import ChatRoom from '../../../lib/models/chatRoom';
+import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
+import type { RouteConfig } from '../../../types/index.d';
+import { verifyToken } from '../../../lib/middlewares/verifyToken';
 
 const deleteChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'delete',

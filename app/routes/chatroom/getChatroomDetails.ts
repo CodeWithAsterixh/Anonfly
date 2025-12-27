@@ -1,6 +1,6 @@
-import withErrorHandling from "../../../lib/middlewares/withErrorHandling.ts";
-import ChatRoom from "../../../lib/models/chatRoom.ts";
-import type { RouteConfig, RouteEvent } from '../../../types/index.d.ts';
+import withErrorHandling from "../../../lib/middlewares/withErrorHandling";
+import ChatRoom from "../../../lib/models/chatRoom";
+import type { RouteConfig, RouteEvent } from '../../../types/index.d';
 
 const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
   method: "get",

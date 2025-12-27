@@ -1,9 +1,9 @@
-import User from '../../../lib/models/user.ts';
-import withErrorHandling from '../../../lib/middlewares/withErrorHandling.ts';
-import type { RouteConfig } from '../../../types/index.d.ts';
+import User from '../../../lib/models/user';
+import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
+import type { RouteConfig } from '../../../types/index.d';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import env from '../../../lib/constants/env.ts';
+import env from '../../../lib/constants/env';
 
 const loginRoute: RouteConfig = {
   method: 'post',

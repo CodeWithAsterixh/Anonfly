@@ -1,7 +1,7 @@
 import { Redis } from 'ioredis';
 import pino from 'pino';
-import env from '../constants/env.ts';
-import type { IMessage } from '../models/message.ts';
+import env from '../constants/env';
+import type { IMessage } from '../models/message';
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',

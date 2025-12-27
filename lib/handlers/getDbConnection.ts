@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import env from "../constants/env.ts";
+import env from "../constants/env";
 
 const connections:Record<string, any>= {};
 

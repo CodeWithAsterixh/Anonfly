@@ -4,7 +4,7 @@ import type {
   HttpMethod,
   RouteConfig,
   generalResponse
-} from "../../types/index.d.ts";
+} from "../../types";
 
 /**
  * Registers a route on an Express app or Router.

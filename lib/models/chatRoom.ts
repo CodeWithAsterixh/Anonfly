@@ -1,5 +1,5 @@
 import { Schema, model, Types, Document } from "mongoose";
-import getDbConnection from "../handlers/getDbConnection.ts";
+import getDbConnection from "../handlers/getDbConnection";
 
 const ReplyToSchema = new Schema({
   messageId: { type: Types.ObjectId, required: true },

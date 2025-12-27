@@ -1,7 +1,7 @@
 import { Schema } from "mongoose";
 
 
-import getDbConnection from "../handlers/getDbConnection.ts";
+import getDbConnection from "../handlers/getDbConnection";
 
 
 

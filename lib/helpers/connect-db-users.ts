@@ -1,6 +1,6 @@
-import User from "../models/user.ts";
-import connectMongoDb from "./connect-mongo-db.ts";
-import useMongoDb from "./use-mongo-db.ts";
+import User from "../models/user";
+import connectMongoDb from "./connect-mongo-db";
+import useMongoDb from "./use-mongo-db";
 
 export default async function connectDbUsers () {
     const dbResponse = await connectMongoDb("users");

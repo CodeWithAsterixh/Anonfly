@@ -13,29 +13,29 @@ import { pinoHttp } from 'pino-http';
 import { v4 as uuidv4 } from 'uuid';
 
 // Helpers
-import env from "../lib/constants/env.ts";
-import useRouter from "../lib/middlewares/routeHandler.ts";
-import helmetMiddleware from "../lib/middlewares/securityHeaders.ts";
-import withErrorHandling from "../lib/middlewares/withErrorHandling.ts";
-import { addMessageToCache, getCachedMessages } from '../lib/helpers/messageCache.ts';
-import ChatRoom, { type IMessage } from '../lib/models/chatRoom.ts';
+import env from "../lib/constants/env";
+import useRouter from "../lib/middlewares/routeHandler";
+import helmetMiddleware from "../lib/middlewares/securityHeaders";
+import withErrorHandling from "../lib/middlewares/withErrorHandling";
+import { addMessageToCache, getCachedMessages } from '../lib/helpers/messageCache';
+import ChatRoom, { type IMessage } from '../lib/models/chatRoom';
 
 // Routes
-import chatroomListRouter from "./routes/chatroom/chatroomlist.ts";
-import createChatroomRoute from "./routes/chatroom/createChatroom.ts";
-import getChatroomMessagesRoute from "./routes/chatroom/getChatroomMessages.ts";
-import joinChatroomRoute from "./routes/chatroom/joinChatroom.ts";
-import deleteChatroomRoute from "./routes/chatroom/deleteChatroom.ts";
-import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails.ts";
-import leaveChatroomRoute from "./routes/chatroom/leaveChatroom.ts";
-import deleteMessageRoute from "./routes/chatroom/deleteMessage.ts"; // Import the new route
-import createUserRoute from "./routes/user/createUser.ts";
-import loginRoute from "./routes/auth/login.ts";
-import getUserRoute from "./routes/auth/getUser.ts";
-import deleteUserRoute from "./routes/user/deleteUser.ts";
+import chatroomListRouter from "./routes/chatroom/chatroomlist";
+import createChatroomRoute from "./routes/chatroom/createChatroom";
+import getChatroomMessagesRoute from "./routes/chatroom/getChatroomMessages";
+import joinChatroomRoute from "./routes/chatroom/joinChatroom";
+import deleteChatroomRoute from "./routes/chatroom/deleteChatroom";
+import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
+import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
+import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
+import createUserRoute from "./routes/user/createUser";
+import loginRoute from "./routes/auth/login";
+import getUserRoute from "./routes/auth/getUser";
+import deleteUserRoute from "./routes/user/deleteUser";
 
-import homeRoute from "./routes/homeRoute.ts";
-import healthzRoute from "./routes/healthzRoute.ts";
+import homeRoute from "./routes/homeRoute";
+import healthzRoute from "./routes/healthzRoute";
 
 // App setup
 const app = express();

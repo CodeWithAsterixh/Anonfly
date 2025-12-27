@@ -1,6 +1,6 @@
-import User from '../../../lib/models/user.ts';
-import withErrorHandling from '../../../lib/middlewares/withErrorHandling.ts';
-import type { RouteConfig } from '../../../types/index.d.ts';
+import User from '../../../lib/models/user';
+import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
+import type { RouteConfig } from '../../../types/index.d';
 import bcrypt from 'bcrypt';
 
 const createUserRoute: RouteConfig = {

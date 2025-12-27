@@ -1,13 +1,11 @@
 {
   "name": "anonfly",
   "version": "1.0.0",
-  "type": "module",
   "main": "app/index.ts",
   "scripts": {
-    "dev": "nodemon --exec ts-node app/index.ts",
     "build": "tsc",
-    "start": "pnpm run typecheck && node -r ts-node/register app/index.ts",
-    "typecheck": "tsc --noEmit",
+    "start": "node dist/app/index.js",
+    "dev": "ts-node-dev --respawn app/index.ts", 
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

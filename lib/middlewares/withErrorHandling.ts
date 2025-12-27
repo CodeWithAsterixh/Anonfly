@@ -1,7 +1,7 @@
 
-import type { ErrorHandlingOptions, generalResponse, RouteEvent } from '../../types/index.d.ts';
-import { normalizeError } from "../helpers/normalizeError.ts";
-import checkHttpConnectivity from "../helpers/ping.ts";
+import type { ErrorHandlingOptions, generalResponse, RouteEvent } from '../../types/index.d';
+import { normalizeError } from "../helpers/normalizeError";
+import checkHttpConnectivity from "../helpers/ping";
 
 /**
  * Wraps an Express-style event handler with:

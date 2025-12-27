@@ -1,20 +1,18 @@
 {
   "compilerOptions": {
-    "target": "es2016",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
+    "target": "ES2020",
+    "module": "CommonJS",
+    "rootDir": ".",
+    "outDir": "dist",
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
-    "outDir": "./dist",
-    "noEmit": true,
-    "allowImportingTsExtensions": true,    
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node"
   },
-  "include": [
-    "**/*.ts"
-  ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    ".github"
   ]
 }

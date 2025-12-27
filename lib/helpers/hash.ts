@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import env from "../constants/env.ts";
+import env from "../constants/env";
 
 const SALT_ROUNDS = parseInt(env.SALT_ROUNDS || "10", 10);  // recommended number of salt rounds
 

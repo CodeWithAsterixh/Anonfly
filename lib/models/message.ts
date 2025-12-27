@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
-import getDbConnection from '../handlers/getDbConnection.ts';
+import getDbConnection from '../handlers/getDbConnection';
 
 export interface IMessage extends Document {
   chatroomId: Types.ObjectId;

@@ -1,7 +1,7 @@
 import pkg from 'express';
 import jwt from 'jsonwebtoken';
-import env from '../constants/env.ts';
-import User from '../models/user.ts';
+import env from '../constants/env';
+import User from '../models/user';
 
 interface AuthenticatedRequest extends pkg.Request {
   user?: any;
