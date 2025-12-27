@@ -18,6 +18,7 @@ import useRouter from "../lib/middlewares/routeHandler";
 import helmetMiddleware from "../lib/middlewares/securityHeaders";
 import withErrorHandling from "../lib/middlewares/withErrorHandling";
 import { addMessageToCache, getCachedMessages } from '../lib/helpers/messageCache';
+import cleanupChatroom from '../lib/helpers/cleanupChatroom';
 import ChatRoom, { type IMessage } from '../lib/models/chatRoom';
 
 // Routes
@@ -158,6 +159,62 @@ function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
     delete ws.chatroomId;
     logger.info(`Client ${ws.id} removed from chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size}`);
   }
+
+  // Notify remaining participants that this user left/disconnected
+  try {
+    const remaining = activeChatrooms.get(chatroomId);
+    if (remaining && ws.userId) {
+      const leaveNotice = JSON.stringify({
+        type: 'userLeft',
+        chatroomId,
+        userId: ws.userId,
+        username: ws.username,
+        timestamp: new Date().toISOString(),
+      });
+      remaining.forEach(client => {
+        if (client.id === ws.id) return; // safety: skip the leaving client
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(leaveNotice);
+        }
+      });
+    }
+  } catch (err) {
+    logger.error(`Failed to broadcast userLeft for ${ws.id}: ${err}`);
+  }
+
+  // Also remove the participant from the persistent chatroom participants list
+  // This makes participant membership ephemeral (only while connected)
+  (async () => {
+    try {
+      if (!ws.userId) return;
+      const chatroom = await ChatRoom.findById(chatroomId);
+      if (!chatroom) return;
+      const participantIndex = chatroom.participants.findIndex(p => p.userId.toString() === ws.userId?.toString());
+      if (participantIndex === -1) return;
+
+      // Remove user from participants list
+      chatroom.participants.splice(participantIndex, 1);
+
+      // If the leaving user is the host, transfer host status or delete chatroom
+      if (chatroom.hostUserId.toString() === ws.userId?.toString()) {
+        if (chatroom.participants.length > 0) {
+          const newHost = chatroom.participants.reduce((prev, curr) => {
+            return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
+          }, chatroom.participants[0]);
+          chatroom.hostUserId = new mongoose.Types.ObjectId(newHost.userId);
+        } else {
+          // No participants left: clear cache and delete chatroom
+          await cleanupChatroom(chatroomId);
+          return;
+        }
+      }
+
+      await chatroom.save();
+      logger.info(`Removed participant ${ws.userId} from chatroom ${chatroomId} in DB`);
+    } catch (err) {
+      logger.error(`Error removing participant ${ws.userId} from chatroom ${chatroomId}: ${err}`);
+    }
+  })();
 }
 
 wss.on('connection', (ws: WebSocket) => {
@@ -188,6 +245,28 @@ wss.on('connection', (ws: WebSocket) => {
       wsClient.username = parsedMessage.username;
       addClientToChatroom(parsedMessage.chatroomId, wsClient);
       wsClient.send(JSON.stringify({ type: 'joinSuccess', chatroomId: parsedMessage.chatroomId }));
+
+      // Notify other participants that a user has joined
+      try {
+        const chatroomClients = activeChatrooms.get(parsedMessage.chatroomId);
+        if (chatroomClients) {
+          const joinNotice = JSON.stringify({
+            type: 'userJoined',
+            chatroomId: parsedMessage.chatroomId,
+            userId: wsClient.userId,
+            username: wsClient.username,
+            timestamp: new Date().toISOString(),
+          });
+          chatroomClients.forEach(client => {
+            if (client.id === wsClient.id) return; // skip the joining client
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(joinNotice);
+            }
+          });
+        }
+      } catch (err) {
+        logger.error(`Failed to broadcast userJoined for ${wsClient.id}: ${err}`);
+      }
 
       // Send cached messages to the newly joined client before processing other client messages
       try {

@@ -64,4 +64,14 @@ export async function addMessageToCache(chatroomId: string, message: IMessage): 
   }
 }
 
+export async function clearCachedMessages(chatroomId: string): Promise<void> {
+  try {
+    const key = `${CHATROOM_MESSAGES_PREFIX}${chatroomId}`;
+    await redisClient.del(key);
+    logger.debug(`Cleared cached messages for chatroom ${chatroomId}`);
+  } catch (error) {
+    logger.error(`Error clearing cached messages for chatroom ${chatroomId}: ${error}`);
+  }
+}
+
 export default redisClient;
