@@ -132,6 +132,8 @@ interface CustomWebSocket extends WebSocket {
   userId?: string; // Optional: to store the authenticated user's ID
   chatroomId?: string; // Optional: to store the chatroom the user is in
   username?: string; // Optional: to store the authenticated user's username
+  syncing?: boolean; // true while server is sending cached messages
+  messageQueue?: any[]; // queue messages received during syncing
 }
 
 export const clients = new Map<string, CustomWebSocket>();
@@ -162,6 +164,8 @@ wss.on('connection', (ws: WebSocket) => {
   const customWs = ws as CustomWebSocket;
   customWs.id = uuidv4();
   customWs.isAlive = true;
+  customWs.syncing = false;
+  customWs.messageQueue = [];
   clients.set(customWs.id, customWs);
   logger.info(`Client connected: ${customWs.id}. Total clients: ${clients.size}`);
 
@@ -169,111 +173,132 @@ wss.on('connection', (ws: WebSocket) => {
     customWs.isAlive = true;
   });
 
-  customWs.on('message', async message => {
-    logger.info(`Received message from ${customWs.id}: ${message}`);
-    try {
-      const parsedMessage = JSON.parse(message.toString());
-      // For now, let's assume a simple message format for chat
-      // { type: "chatMessage", chatroomId: "abc", content: "Hello" }
-      if (parsedMessage.type === 'message' && parsedMessage.chatroomId && parsedMessage.content) {
-        // Authenticate the user for this message (this is a placeholder for actual auth)
-        // For now, we'll assume the userId and username are already on the customWs object after initial auth
-        if (!customWs.userId || !customWs.chatroomId) {
-          logger.warn(`Message received from unauthenticated or unjoined client: ${customWs.id}`);
-          customWs.send(JSON.stringify({ type: 'error', message: 'Not authenticated or not in a chatroom' }));
-          return;
-        }
+  // Centralized parsed message handler that queues messages during initial sync
+  async function handleParsedMessage(wsClient: CustomWebSocket, parsedMessage: any) {
+    // If syncing (server is sending cached messages), queue incoming chat messages
+    if (wsClient.syncing) {
+      if (!wsClient.messageQueue) wsClient.messageQueue = [];
+      wsClient.messageQueue.push(parsedMessage);
+      return;
+    }
 
-        const { chatroomId, content } = parsedMessage;
+    if (parsedMessage.type === 'joinChatroom' && parsedMessage.chatroomId && parsedMessage.userId && parsedMessage.username) {
+      wsClient.syncing = true;
+      wsClient.userId = parsedMessage.userId;
+      wsClient.username = parsedMessage.username;
+      addClientToChatroom(parsedMessage.chatroomId, wsClient);
+      wsClient.send(JSON.stringify({ type: 'joinSuccess', chatroomId: parsedMessage.chatroomId }));
 
-        if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
-          logger.warn(`Invalid chatroomId received from ${customWs.id}: ${chatroomId}`);
-          customWs.send(JSON.stringify({ type: 'error', message: 'Invalid chatroom ID' }));
-          return;
-        }
-        if (!mongoose.Types.ObjectId.isValid(customWs.userId)) {
-          logger.warn(`Invalid userId on customWs from ${customWs.id}: ${customWs.userId}`);
-          customWs.send(JSON.stringify({ type: 'error', message: 'Invalid user ID' }));
-          return;
-        }
-
-        const newMessage: IMessage = {
-          _id: new mongoose.Types.ObjectId(), // Generate a new ObjectId for the embedded message
-          senderUserId: new mongoose.Types.ObjectId(customWs.userId),
-          content,
-          timestamp: new Date(),
-        };
-
-        // Find the chatroom and push the new message
-        const chatroom = await ChatRoom.findById(chatroomId);
-        if (!chatroom) {
-          logger.warn(`Chatroom ${chatroomId} not found for message from ${customWs.id}`);
-          customWs.send(JSON.stringify({ type: 'error', message: 'Chatroom not found' }));
-          return;
-        }
-        chatroom.messages.push(newMessage);
-        await chatroom.save();
-
-        // Add message to cache
-        addMessageToCache(chatroomId, {
-          chatroomId: new mongoose.Types.ObjectId(chatroomId),
-          senderId: newMessage.senderUserId,
-          senderUsername: customWs.username || 'Anonymous',
-          content: newMessage.content,
-          timestamp: newMessage.timestamp,
-        } as any);
-
-        // Broadcast message to all clients in the chatroom
-        const chatroomClients = activeChatrooms.get(chatroomId);
-        if (chatroomClients) {
-          const messageToBroadcast = JSON.stringify({
-            type: 'chatMessage',
-            chatroomId,
-            senderId: customWs.userId,
-            senderUsername: customWs.username || 'Anonymous',
-            content,
-            timestamp: new Date().toISOString(),
-          });
-          chatroomClients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              // Implement backpressure handling here
-              if (client.bufferedAmount > 1024 * 1024) { // If buffer is > 1MB
-                logger.warn(`Backpressure: Client ${client.id} buffer is full. Skipping message.`);
-                // Optionally, terminate connection or send error to client
-                return;
-              }
-              client.send(messageToBroadcast);
-            }
-          });
-        }
-      } else if (parsedMessage.type === 'joinChatroom' && parsedMessage.chatroomId && parsedMessage.userId && parsedMessage.username) {
-        // This is a simplified join logic. In a real app, this would involve JWT verification
-        // and checking if the user is allowed to join the chatroom.
-        customWs.userId = parsedMessage.userId;
-        customWs.username = parsedMessage.username;
-        addClientToChatroom(parsedMessage.chatroomId, customWs);
-        customWs.send(JSON.stringify({ type: 'joinSuccess', chatroomId: parsedMessage.chatroomId }));
-
-        // Send cached messages to the newly joined client
+      // Send cached messages to the newly joined client before processing other client messages
+      try {
         const cachedMessages = await getCachedMessages(parsedMessage.chatroomId);
-        cachedMessages.forEach(msg => {
-          customWs.send(JSON.stringify({
+        for (const msg of cachedMessages) {
+          wsClient.send(JSON.stringify({
             type: 'chatMessage',
             chatroomId: msg.chatroomId,
             senderId: msg.senderId,
             senderUsername: msg.senderUsername,
             content: msg.content,
-            timestamp: new Date(msg.timestamp).toISOString(), // Convert timestamp string to Date object
+            timestamp: new Date(msg.timestamp).toISOString(),
           }));
-        });
-      } else if (parsedMessage.type === 'leaveChatroom' && parsedMessage.chatroomId) {
-        if (customWs.chatroomId === parsedMessage.chatroomId) {
-          removeClientFromChatroom(parsedMessage.chatroomId, customWs);
-          customWs.send(JSON.stringify({ type: 'leaveSuccess', chatroomId: parsedMessage.chatroomId }));
-        } else {
-          customWs.send(JSON.stringify({ type: 'error', message: 'Not in the specified chatroom' }));
         }
+      } catch (err) {
+        logger.error(`Failed to fetch/send cached messages for ${wsClient.id}: ${err}`);
       }
+
+      wsClient.syncing = false;
+      // Flush queued messages (if any) in order
+      const queued = wsClient.messageQueue ? wsClient.messageQueue.splice(0) : [];
+      for (const qm of queued) {
+        await handleParsedMessage(wsClient, qm);
+      }
+      return;
+    }
+
+    // Handle leaving a chatroom
+    if (parsedMessage.type === 'leaveChatroom' && parsedMessage.chatroomId) {
+      if (wsClient.chatroomId === parsedMessage.chatroomId) {
+        removeClientFromChatroom(parsedMessage.chatroomId, wsClient);
+        wsClient.send(JSON.stringify({ type: 'leaveSuccess', chatroomId: parsedMessage.chatroomId }));
+      } else {
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Not in the specified chatroom' }));
+      }
+      return;
+    }
+
+    // Handle sending a chat message
+    if (parsedMessage.type === 'message' && parsedMessage.chatroomId && parsedMessage.content) {
+      if (!wsClient.userId || !wsClient.chatroomId) {
+        logger.warn(`Message received from unauthenticated or unjoined client: ${wsClient.id}`);
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Not authenticated or not in a chatroom' }));
+        return;
+      }
+
+      const { chatroomId, content } = parsedMessage;
+      if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+        logger.warn(`Invalid chatroomId received from ${wsClient.id}: ${chatroomId}`);
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid chatroom ID' }));
+        return;
+      }
+      if (!mongoose.Types.ObjectId.isValid(wsClient.userId)) {
+        logger.warn(`Invalid userId on customWs from ${wsClient.id}: ${wsClient.userId}`);
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid user ID' }));
+        return;
+      }
+
+      const newMessage: IMessage = {
+        _id: new mongoose.Types.ObjectId(),
+        senderUserId: new mongoose.Types.ObjectId(wsClient.userId),
+        content,
+        timestamp: new Date(),
+      };
+
+      const chatroom = await ChatRoom.findById(chatroomId);
+      if (!chatroom) {
+        logger.warn(`Chatroom ${chatroomId} not found for message from ${wsClient.id}`);
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Chatroom not found' }));
+        return;
+      }
+      chatroom.messages.push(newMessage);
+      await chatroom.save();
+
+      addMessageToCache(chatroomId, {
+        chatroomId: new mongoose.Types.ObjectId(chatroomId),
+        senderId: newMessage.senderUserId,
+        senderUsername: wsClient.username || 'Anonymous',
+        content: newMessage.content,
+        timestamp: newMessage.timestamp,
+      } as any);
+
+      const chatroomClients = activeChatrooms.get(chatroomId);
+      if (chatroomClients) {
+        const messageToBroadcast = JSON.stringify({
+          type: 'chatMessage',
+          chatroomId,
+          senderId: wsClient.userId,
+          senderUsername: wsClient.username || 'Anonymous',
+          content,
+          timestamp: new Date().toISOString(),
+        });
+        chatroomClients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            if (client.bufferedAmount > 1024 * 1024) {
+              logger.warn(`Backpressure: Client ${client.id} buffer is full. Skipping message.`);
+              return;
+            }
+            client.send(messageToBroadcast);
+          }
+        });
+      }
+      return;
+    }
+  }
+
+  customWs.on('message', async message => {
+    logger.info(`Received message from ${customWs.id}: ${message}`);
+    try {
+      const parsedMessage = JSON.parse(message.toString());
+      await handleParsedMessage(customWs, parsedMessage);
     } catch (error) {
       logger.error(`Failed to parse or handle WebSocket message from ${customWs.id}: ${error}`);
       customWs.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
