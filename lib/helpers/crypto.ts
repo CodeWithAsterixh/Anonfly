@@ -27,7 +27,6 @@ export function verifySignature(message: string | Buffer, signature: string, pub
       sigBuffer
     );
   } catch (err) {
-    console.error('Signature verification failed:', err);
     return false;
   }
 }

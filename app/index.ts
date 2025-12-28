@@ -350,7 +350,7 @@ wss.on('connection', (ws: WebSocket) => {
       if (signature) {
         const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
         if (participant && participant.publicKey) {
-          const isValid = verifySignature(btoa(content), signature, participant.publicKey);
+          const isValid = verifySignature(content, signature, participant.publicKey);
           if (!isValid) {
             logger.warn(`Invalid signature from ${wsClient.userAid} in chatroom ${chatroomId}`);
             wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid message signature' }));
