@@ -7,31 +7,23 @@ interface AuthenticatedRequest extends pkg.Request {
 
 const verifyToken = async (req: AuthenticatedRequest, res: pkg.Response, next: pkg.NextFunction) => {
   try {
-    let token: string | undefined;
+    let token = req.header('Authorization')?.replace('Bearer ', '');
 
-    // 1. Try to get token from Authorization header
-    const authHeader = req.header('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    }
-
-    // 2. Fallback to query parameter (useful for SSE/EventSource which doesn't support headers)
-    if (!token && req.query.token) {
+    // Support token in query params (useful for SSE/EventSource)
+    // Also handle cases where token might be "null" or "undefined" as a string
+    if ((!token || token === 'null' || token === 'undefined') && req.query.token) {
       token = req.query.token as string;
     }
 
-    // Sanitize token (handle "null" or "undefined" as strings)
-    if (token === 'null' || token === 'undefined' || token === '') {
-      token = undefined;
-    }
-
-    if (!token) {
+    if (!token || token === 'null' || token === 'undefined') {
+      console.warn(`[Auth] No token provided for ${req.method} ${req.path}`);
       throw new Error('Authentication failed: No session token provided');
     }
 
     const session = sessionStore.get(token);
 
     if (!session) {
+      console.warn(`[Auth] Invalid or expired token for ${req.method} ${req.path}: ${token.substring(0, 8)}...`);
       throw new Error('Authentication failed: Invalid or expired session');
     }
 
