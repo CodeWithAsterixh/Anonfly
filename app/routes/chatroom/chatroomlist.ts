@@ -26,6 +26,7 @@ async function getFormattedChatroomList(userAid: string) {
         description: 1,
         hostAid: 1,
         participants: 1,
+        isLocked: 1,
         lastMessage: "$lastMessage.content",
       }
     }
@@ -41,6 +42,7 @@ async function getFormattedChatroomList(userAid: string) {
       description: room.description,
       hostAid: room.hostAid,
       participantCount: room.participants.length,
+      isLocked: room.isLocked || false,
       lastMessage: isParticipant ? lastMessageContent : null,
     };
   });

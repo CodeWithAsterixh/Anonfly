@@ -2,14 +2,16 @@ import ChatRoom from '../../../lib/models/chatRoom';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
+import bcrypt from 'bcrypt';
 
 const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/chatrooms/:id/join',
   middleware: [verifyToken],
   handler: withErrorHandling(async (event) => {
-    const { req, params } = event;
+    const { req, params, body } = event;
     const { id: chatroomId } = params;
+    const { password } = body as { password?: string };
     const userAid = (req as any)?.userAid;
     const username = (req as any)?.username;
 
@@ -48,10 +50,34 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     if (isParticipant) {
       return {
         message: 'User is already a participant in this chatroom',
-        statusCode: 409,
-        success: false,
-        status: 'bad',
+        statusCode: 200, // Return 200 instead of 409 to allow re-joining/accessing details
+        success: true,
+        status: 'good',
+        data: { chatroomId: chatroom._id, roomname: chatroom.roomname },
       };
+    }
+
+    // Password verification for locked rooms
+    if (chatroom.isLocked && chatroom.password) {
+      if (!password) {
+        return {
+          message: 'Password required for this chatroom',
+          statusCode: 403,
+          success: false,
+          status: 'bad',
+          requiresPassword: true
+        };
+      }
+
+      const isMatch = await bcrypt.compare(password, chatroom.password);
+      if (!isMatch) {
+        return {
+          message: 'Incorrect password',
+          statusCode: 403,
+          success: false,
+          status: 'bad',
+        };
+      }
     }
 
     chatroom.participants.push({ 

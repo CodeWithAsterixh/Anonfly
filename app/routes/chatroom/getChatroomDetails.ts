@@ -11,7 +11,7 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
     const { chatroomId } = event.req.params;
 
     const chatroom = await ChatRoom.findById(chatroomId).select(
-      "roomname description hostAid participants"
+      "roomname description hostAid participants isLocked"
     );
 
     if (!chatroom) {
@@ -33,6 +33,7 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
         roomname: chatroom.roomname,
         description: chatroom.description,
         hostAid: chatroom.hostAid,
+        isLocked: chatroom.isLocked || false,
         participants: chatroom.participants.map((p) => ({
           userAid: p.userAid,
           username: p.username,

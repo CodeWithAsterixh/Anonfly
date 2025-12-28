@@ -45,6 +45,8 @@ export interface IChatRoom extends Document {
   messages: IMessage[];
   encryptedRoomKey?: string; // Encrypted for the host
   roomKeyIv?: string;
+  password?: string; // Hashed password
+  isLocked: boolean;
 }
 
 const ChatRoomSchema = new Schema<IChatRoom>({
@@ -53,6 +55,8 @@ const ChatRoomSchema = new Schema<IChatRoom>({
   hostAid: { type: String, required: true },
   encryptedRoomKey: { type: String },
   roomKeyIv: { type: String },
+  password: { type: String },
+  isLocked: { type: Boolean, default: false },
   participants: [ParticipantSchema],
   messages: [new Schema({
     senderAid: { type: String, required: true },

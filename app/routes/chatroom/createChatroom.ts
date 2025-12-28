@@ -3,6 +3,7 @@ import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
+import bcrypt from 'bcrypt';
 
 const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
@@ -10,7 +11,11 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   middleware: [verifyToken],
   handler: withErrorHandling(async (event) => {
     const { body, req } = event;
-    const { roomname, description } = body as { roomname: string; description?: string };
+    const { roomname, description, password } = body as { 
+      roomname: string; 
+      description?: string; 
+      password?: string;
+    };
 
     if (!roomname) {
       return {
@@ -35,10 +40,20 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     try {
+      let hashedPassword;
+      let isLocked = false;
+
+      if (password && password.trim() !== '') {
+        hashedPassword = await bcrypt.hash(password, 10);
+        isLocked = true;
+      }
+
       const newChatRoom = new ChatRoom({
         roomname,
         description,
         hostAid,
+        password: hashedPassword,
+        isLocked,
         participants: [{ 
           userAid: hostAid, 
           username,
