@@ -6,7 +6,7 @@ import { verifyToken } from '../../../lib/middlewares/verifyToken';
 
 const router = Router();
 
-router.get('/chatrooms', verifyToken, async (req, res) => {
+router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
