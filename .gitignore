@@ -1,12 +1,26 @@
-# exclude node_modules directory
-/node_modules
+# Dependencies
+node_modules/
+dist/
+pnpm-debug.log*
 
-# exclude log files
-*.log
-
-/dist
-
-# exclude environment variable files
+# Environment
 .env
-/.idea/
-/kadian-inventory/.idea/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
