@@ -46,7 +46,6 @@ export default async function connectMongoDb(db_name="") {
     }
     return response;
   } catch (error) {
-    console.error("MongoDB Connection Error:", error);
     response.message = error instanceof Error ? error.message : "Something went wrong while connecting to mongo db";
     response.mongoDbStatus = "offline";
     return response;

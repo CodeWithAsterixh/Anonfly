@@ -16,6 +16,10 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
   // Polling interval for updates
   const intervalId = setInterval(async () => {
     try {
+      if (res.writableEnded) {
+        clearInterval(intervalId);
+        return;
+      }
       // Fetch all chatrooms
       const chatrooms = await ChatRoom.aggregate([
         {
@@ -61,9 +65,7 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
     }
   }, 5000); // Poll every 5 seconds
 
-  // Handle client disconnection
   req.on('close', () => {
-    console.log('Client disconnected from chatroom list SSE');
     clearInterval(intervalId);
     res.end();
   });

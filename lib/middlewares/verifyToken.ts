@@ -7,11 +7,22 @@ interface AuthenticatedRequest extends pkg.Request {
 
 const verifyToken = async (req: AuthenticatedRequest, res: pkg.Response, next: pkg.NextFunction) => {
   try {
-    let token = req.header('Authorization')?.replace('Bearer ', '');
+    let token: string | undefined;
 
-    // Support token in query params (useful for SSE/EventSource)
+    // 1. Try to get token from Authorization header
+    const authHeader = req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+
+    // 2. Fallback to query parameter (useful for SSE/EventSource which doesn't support headers)
     if (!token && req.query.token) {
       token = req.query.token as string;
+    }
+
+    // Sanitize token (handle "null" or "undefined" as strings)
+    if (token === 'null' || token === 'undefined' || token === '') {
+      token = undefined;
     }
 
     if (!token) {

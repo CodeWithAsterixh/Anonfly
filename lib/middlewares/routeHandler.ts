@@ -79,24 +79,12 @@ export function routeHandler<ReturnT>({
           result.statusCode !== undefined &&
           result.statusCode <= 299
         ) {
-          const status = chalk.green.bold(result?.statusCode || 200);
-
           if (Buffer.isBuffer(result) || isStream(result)) {
-            const message = chalk.gray.bold("Sending raw response for");
-            console.log(`
-${message} ${action_verb} ${action_path}: ${status}
-`);
             return res.status(result.statusCode || 200).send(result);
           } else {
-            const message = chalk.gray.bold("Sending JSON response for");
-
-            console.log(`${message} ${action_verb} ${action_path}: ${status}`);
             return res.status(result.statusCode || 200).json(result);
           }
         } else {
-          const status = chalk.red.bold(result?.statusCode || 500);
-          const message = chalk.gray.bold("Sending response for");
-          console.log(`${message} ${action_verb} ${action_path}: ${status}`);
           return res.status(result?.statusCode || 500).json({
             message: result?.message || "An unexpected error occurred",
             status: "bad",
