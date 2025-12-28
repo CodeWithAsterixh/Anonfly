@@ -32,11 +32,14 @@ import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
 import editChatroomRoute from "./routes/chatroom/editChatroom";
 import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
 import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
+import chatroomSSERoute from "./routes/chatroom/chatroomSSE";
 import challengeRoute from "./routes/auth/challenge";
 import verifyRoute from "./routes/auth/verify";
 
 import homeRoute from "./routes/homeRoute";
 import healthzRoute from "./routes/healthzRoute";
+
+import chatEventEmitter from '../lib/helpers/eventEmitter';
 
 // App setup
 const app = express();
@@ -90,6 +93,7 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 const router = useRouter(app);
 
 app.use('/', chatroomListRouter);
+app.use('/', chatroomSSERoute);
 
 
 
@@ -155,10 +159,29 @@ function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   }
 }
 
-function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
+async function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {
     chatroomClients.delete(ws.id);
+    
+    // Remove from DB participants list as well
+    try {
+      if (ws.userAid) {
+        const chatroom = await ChatRoom.findById(chatroomId);
+        if (chatroom) {
+          const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
+          if (participantIndex !== -1) {
+            chatroom.participants.splice(participantIndex, 1);
+            await chatroom.save();
+            chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
+            logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB due to disconnect`);
+          }
+        }
+      }
+    } catch (err) {
+      logger.error(`Error removing participant from DB on disconnect: ${err}`);
+    }
+
     if (chatroomClients.size === 0) {
       activeChatrooms.delete(chatroomId);
 
@@ -236,6 +259,7 @@ async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
     }
 
     await chatroom.save();
+    chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
     logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB (explicit leave)`);
   } catch (err) {
     logger.error(`Error handling explicit leave for participant ${ws.userAid} in chatroom ${chatroomId}: ${err}`);
@@ -268,7 +292,7 @@ wss.on('connection', (ws: WebSocket) => {
       // If the client is already in a chatroom, remove them from the previous one first
       if (wsClient.chatroomId && wsClient.chatroomId !== parsedMessage.chatroomId) {
         logger.info(`Client ${wsClient.id} switching from room ${wsClient.chatroomId} to ${parsedMessage.chatroomId}`);
-        removeClientFromChatroom(wsClient.chatroomId, wsClient);
+        await removeClientFromChatroom(wsClient.chatroomId, wsClient);
       }
 
       wsClient.syncing = true;
@@ -284,6 +308,18 @@ wss.on('connection', (ws: WebSocket) => {
       }
 
       const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
+      
+      if (!participant && wsClient.username && wsClient.userAid) {
+        // If not a participant yet, add them (this handles cases where /join wasn't called or failed)
+        chatroom.participants.push({
+          userAid: wsClient.userAid,
+          username: wsClient.username,
+          joinedAt: new Date()
+        });
+        await chatroom.save();
+        chatEventEmitter.emit(`chatroomUpdated:${parsedMessage.chatroomId}`);
+      }
+      
       const publicKey = participant?.publicKey;
       const exchangePublicKey = participant?.exchangePublicKey;
 
@@ -385,7 +421,7 @@ wss.on('connection', (ws: WebSocket) => {
     // Handle leaving a chatroom
     if (parsedMessage.type === 'leaveChatroom' && parsedMessage.chatroomId) {
       if (wsClient.chatroomId === parsedMessage.chatroomId) {
-        removeClientFromChatroom(parsedMessage.chatroomId, wsClient);
+        await removeClientFromChatroom(parsedMessage.chatroomId, wsClient);
         await handleExplicitLeave(parsedMessage.chatroomId, wsClient);
         wsClient.send(JSON.stringify({ type: 'leaveSuccess', chatroomId: parsedMessage.chatroomId }));
       } else {
@@ -506,10 +542,10 @@ wss.on('connection', (ws: WebSocket) => {
     }
   });
 
-  customWs.on('close', () => {
+  customWs.on('close', async () => {
     clients.delete(customWs.id);
     if (customWs.chatroomId) {
-      removeClientFromChatroom(customWs.chatroomId, customWs);
+      await removeClientFromChatroom(customWs.chatroomId, customWs);
     }
     logger.info(`Client disconnected: ${customWs.id}. Total clients: ${clients.size}`);
   });

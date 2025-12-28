@@ -3,6 +3,7 @@ import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import bcrypt from 'bcrypt';
+import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 
 const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
@@ -88,6 +89,9 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
       joinedAt: new Date() 
     });
     await chatroom.save();
+
+    // Emit event for real-time updates
+    chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
 
     return {
       message: 'Successfully joined chatroom',

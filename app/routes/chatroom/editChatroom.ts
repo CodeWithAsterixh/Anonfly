@@ -2,6 +2,7 @@ import ChatRoom from '../../../lib/models/chatRoom';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
+import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 import { Types } from 'mongoose';
 
 const editChatroomRoute: Omit<RouteConfig, 'app'> = {
@@ -51,6 +52,9 @@ const editChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     await chatroom.save();
+
+    // Emit event for real-time updates
+    chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
 
     return {
       message: 'Chatroom updated',

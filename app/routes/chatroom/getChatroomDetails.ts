@@ -34,6 +34,7 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
         description: chatroom.description,
         hostAid: chatroom.hostAid,
         isLocked: chatroom.isLocked || false,
+        participantCount: chatroom.participants.length,
         participants: chatroom.participants.map((p) => ({
           userAid: p.userAid,
           username: p.username,
