@@ -2,6 +2,8 @@ import pkg from 'express';
 import { sessionStore } from '../helpers/sessionStore';
 
 interface AuthenticatedRequest extends pkg.Request {
+  userAid?: string;
+  username?: string;
   session?: any;
 }
 
@@ -16,21 +18,19 @@ const verifyToken = async (req: AuthenticatedRequest, res: pkg.Response, next: p
     }
 
     if (!token || token === 'null' || token === 'undefined') {
-      console.warn(`[Auth] No token provided for ${req.method} ${req.path}`);
       throw new Error('Authentication failed: No session token provided');
     }
 
     const session = sessionStore.get(token);
 
     if (!session) {
-      console.warn(`[Auth] Invalid or expired token for ${req.method} ${req.path}: ${token.substring(0, 8)}...`);
       throw new Error('Authentication failed: Invalid or expired session');
     }
 
     // Attach session data to request
-    (req as any).userAid = session.aid;
-    (req as any).username = session.username;
-    (req as any).session = session;
+    req.userAid = session.aid;
+    req.username = session.username;
+    req.session = session;
 
     next();
   } catch (error: any) {

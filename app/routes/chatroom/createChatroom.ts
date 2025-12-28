@@ -2,6 +2,7 @@ import ChatRoom from '../../../lib/models/chatRoom';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
+import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 
 const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
@@ -47,6 +48,9 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
       });
 
       await newChatRoom.save();
+
+      // Emit event that a new chatroom has been created
+      chatEventEmitter.emit('chatroomCreated', newChatRoom);
 
       return {
         message: 'Chatroom created successfully',

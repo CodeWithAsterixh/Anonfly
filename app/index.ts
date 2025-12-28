@@ -73,8 +73,8 @@ app.use(httpLogger);
 // CORS configuration with strict options
 app.use(cors({
   origin: env.NODE_ENV === 'production' 
-    ? (env.ALLOWEDDOMAIN ? env.ALLOWEDDOMAIN.split(",") : [])
-    : ['http://localhost:8000', 'http://localhost:3000', 'http://localhost:5173'],
+    ? (env.ALLOWEDDOMAIN ? env.ALLOWEDDOMAIN.split(",").map(o => o.trim()) : [])
+    : ['http://localhost:8000', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -83,8 +83,8 @@ app.use(cors({
 }));
 
 // Body parsers with appropriate limits
-app.use(bodyParser.json({ limit: '2mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 
 const router = useRouter(app);

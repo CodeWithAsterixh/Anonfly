@@ -10,13 +10,15 @@ type Pagination = {
 
 import { Request, Response, NextFunction } from 'express';
 
-interface RouteEvent {
-  req: Request;
+export interface RouteEvent {
+  req: Request & { userAid?: string; username?: string; session?: any };
   res: Response;
   next: NextFunction;
   params: Record<string, string>;
-  query: Record<string, string | string[] | undefined>;
-  body: unknown;
+  query: Record<string, any>;
+  body: any;
+  headers: Record<string, any>;
+  rawBody?: Buffer;
 }
 
 interface ErrorHandlingOptions {
