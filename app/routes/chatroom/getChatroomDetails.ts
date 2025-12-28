@@ -1,15 +1,17 @@
 import withErrorHandling from "../../../lib/middlewares/withErrorHandling";
 import ChatRoom from "../../../lib/models/chatRoom";
 import type { RouteConfig, RouteEvent } from '../../../types/index.d';
+import { verifyToken } from "../../../lib/middlewares/verifyToken";
 
 const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
   method: "get",
   path: "/chatroom/:chatroomId/details",
+  middleware: [verifyToken],
   handler: withErrorHandling(async (event: RouteEvent) => {
     const { chatroomId } = event.req.params;
 
     const chatroom = await ChatRoom.findById(chatroomId).select(
-      "roomname description hostUserId participants"
+      "roomname description hostAid participants"
     );
 
     if (!chatroom) {
@@ -30,10 +32,12 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
         roomId: chatroom._id,
         roomname: chatroom.roomname,
         description: chatroom.description,
-        hostUserId: chatroom.hostUserId,
+        hostAid: chatroom.hostAid,
         participants: chatroom.participants.map((p) => ({
-          userId: p.userId,
+          userAid: p.userAid,
           username: p.username,
+          publicKey: p.publicKey,
+          exchangePublicKey: p.exchangePublicKey,
         })),
       },
     };

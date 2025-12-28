@@ -24,12 +24,15 @@ redisClient.on('error', (err: Error) => {
 const CHATROOM_MESSAGES_PREFIX = 'chatroom_messages:';
 const CACHE_EXPIRATION_SECONDS = 60 * 60; // 1 hour
 
-export async function cacheMessages(chatroomId: string, messages: IMessage[]): Promise<void> {
+export async function cacheMessages(chatroomId: string, messages: any[]): Promise<void> {
   try {
     const key = `${CHATROOM_MESSAGES_PREFIX}${chatroomId}`;
     // Store messages as a JSON string in a list, or individual hashes
     // For simplicity, let's store as a list of JSON strings
-    const serializedMessages = messages.map(msg => JSON.stringify(msg.toObject()));
+    const serializedMessages = messages.map(msg => {
+      const plainMsg = msg.toObject ? msg.toObject() : msg;
+      return JSON.stringify(plainMsg);
+    });
     await redisClient.del(key); // Clear existing cache for this chatroom
     if (serializedMessages.length > 0) {
       await redisClient.rpush(key, ...serializedMessages);
@@ -41,22 +44,23 @@ export async function cacheMessages(chatroomId: string, messages: IMessage[]): P
   }
 }
 
-export async function getCachedMessages(chatroomId: string): Promise<IMessage[]> {
+export async function getCachedMessages(chatroomId: string): Promise<any[]> {
   try {
     const key = `${CHATROOM_MESSAGES_PREFIX}${chatroomId}`;
     const serializedMessages = await redisClient.lrange(key, 0, -1);
     logger.debug(`Retrieved ${serializedMessages.length} messages from cache for chatroom ${chatroomId}`);
-    return serializedMessages.map((msgStr: string) => JSON.parse(msgStr) as IMessage);
+    return serializedMessages.map((msgStr: string) => JSON.parse(msgStr));
   } catch (error) {
     logger.error(`Error retrieving messages from cache for chatroom ${chatroomId}: ${error}`);
     return [];
   }
 }
 
-export async function addMessageToCache(chatroomId: string, message: IMessage): Promise<void> {
+export async function addMessageToCache(chatroomId: string, message: any): Promise<void> {
   try {
     const key = `${CHATROOM_MESSAGES_PREFIX}${chatroomId}`;
-    await redisClient.rpush(key, JSON.stringify(message.toObject()));
+    const plainMsg = message.toObject ? message.toObject() : message;
+    await redisClient.rpush(key, JSON.stringify(plainMsg));
     await redisClient.expire(key, CACHE_EXPIRATION_SECONDS); // Reset expiration on new message
     logger.debug(`Added new message to cache for chatroom ${chatroomId}`);
   } catch (error) {

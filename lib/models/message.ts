@@ -3,17 +3,19 @@ import getDbConnection from '../handlers/getDbConnection';
 
 export interface IMessage extends Document {
   chatroomId: Types.ObjectId;
-  senderId: Types.ObjectId;
+  senderAid: string;
   senderUsername: string;
-  content: string;
+  content: string; // This will now be an encrypted blob
+  signature?: string; // Signature of the encrypted blob
   timestamp: Date;
 }
 
 const MessageSchema: Schema = new Schema({
   chatroomId: { type: Schema.Types.ObjectId, required: true, ref: 'ChatRoom' },
-  senderId: { type: Schema.Types.ObjectId, required: true, ref: 'User' },
+  senderAid: { type: String, required: true },
   senderUsername: { type: String, required: true },
   content: { type: String, required: true },
+  signature: { type: String },
   timestamp: { type: Date, default: Date.now },
 });
 

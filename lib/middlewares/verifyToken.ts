@@ -1,10 +1,8 @@
 import pkg from 'express';
-import jwt from 'jsonwebtoken';
-import env from '../constants/env';
-import User from '../models/user';
+import { sessionStore } from '../helpers/sessionStore';
 
 interface AuthenticatedRequest extends pkg.Request {
-  user?: any;
+  session?: any;
 }
 
 const verifyToken = async (req: AuthenticatedRequest, res: pkg.Response, next: pkg.NextFunction) => {
@@ -12,21 +10,20 @@ const verifyToken = async (req: AuthenticatedRequest, res: pkg.Response, next: p
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
-      throw new Error('Authentication failed: No token provided');
+      throw new Error('Authentication failed: No session token provided');
     }
 
-    if (!env.JWT_ACCESS_SECRET) {
-      throw new Error('JWT_ACCESS_SECRET is not defined');
+    const session = sessionStore.get(token);
+
+    if (!session) {
+      throw new Error('Authentication failed: Invalid or expired session');
     }
 
-    const decoded: any = jwt.verify(token, env.JWT_ACCESS_SECRET);
-    const user = await User.findOne({ _id: decoded.userId });
+    // Attach session data to request
+    (req as any).userAid = session.aid;
+    (req as any).username = session.username;
+    (req as any).session = session;
 
-    if (!user) {
-      throw new Error('Authentication failed: User not found');
-    }
-
-    req.user = user;
     next();
   } catch (error: any) {
     res.status(401).json({ error: error.message });

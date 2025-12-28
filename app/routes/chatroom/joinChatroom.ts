@@ -10,10 +10,10 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   handler: withErrorHandling(async (event) => {
     const { req, params } = event;
     const { id: chatroomId } = params;
-    const userId = (req.user as any)?._id;
-    const username = (req.user as any)?.username;
+    const userAid = (req as any)?.userAid;
+    const username = (req as any)?.username;
 
-    if (!userId) {
+    if (!userAid) {
       return {
         message: 'User not authenticated',
         statusCode: 401,
@@ -43,7 +43,7 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // Check if user is already a participant
-    const isParticipant = chatroom.participants.some(p => p.userId.toString() === userId.toString());
+    const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
 
     if (isParticipant) {
       return {
@@ -54,7 +54,13 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    chatroom.participants.push({ userId, username, joinedAt: new Date() });
+    chatroom.participants.push({ 
+      userAid, 
+      username, 
+      publicKey: (req as any).session?.publicKey,
+      exchangePublicKey: (req as any).session?.exchangePublicKey,
+      joinedAt: new Date() 
+    });
     await chatroom.save();
 
     return {

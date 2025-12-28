@@ -20,10 +20,11 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // Assuming req.user is populated by authentication middleware
-    const hostUserId = (req.user as any)?._id;
+    // Assuming req.userAid is populated by authentication middleware
+    const hostAid = (req as any)?.userAid;
+    const username = (req as any)?.username;
 
-    if (!hostUserId) {
+    if (!hostAid) {
       return {
         message: 'User not authenticated',
         statusCode: 401,
@@ -36,8 +37,13 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
       const newChatRoom = new ChatRoom({
         roomname,
         description,
-        hostUserId,
-        participants: [{ userId: hostUserId, username: (req.user as any)?.username }], // Add host as participant
+        hostAid,
+        participants: [{ 
+          userAid: hostAid, 
+          username,
+          publicKey: (req as any).session?.publicKey,
+          exchangePublicKey: (req as any).session?.exchangePublicKey
+        }], // Add host as participant
       });
 
       await newChatRoom.save();

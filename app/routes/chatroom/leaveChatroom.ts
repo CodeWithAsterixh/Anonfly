@@ -11,9 +11,9 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
   handler: withErrorHandling(async (event) => {
     const { req, params } = event;
     const { id: chatroomId } = params;
-    const userId = (req.user as any)?._id;
+    const userAid = (req as any)?.userAid;
 
-    if (!userId) {
+    if (!userAid) {
       return {
         message: 'User not authenticated',
         statusCode: 401,
@@ -42,7 +42,7 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    const participantIndex = chatroom.participants.findIndex(p => p.userId.toString() === userId.toString());
+    const participantIndex = chatroom.participants.findIndex(p => p.userAid === userAid);
 
     if (participantIndex === -1) {
       return {
@@ -57,13 +57,13 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
     chatroom.participants.splice(participantIndex, 1);
 
     // If the leaving user is the host, transfer host status
-    if (chatroom.hostUserId.toString() === userId.toString()) {
+    if (chatroom.hostAid === userAid) {
       if (chatroom.participants.length > 0) {
         // Find participant with the closest timestamp to be the new host
         const newHost = chatroom.participants.reduce((prev, curr) => {
           return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
         }, chatroom.participants[0]);
-        chatroom.hostUserId = new Types.ObjectId(newHost.userId);
+        chatroom.hostAid = newHost.userAid;
       } else {
         // If no participants left, delete the chatroom
         await ChatRoom.deleteOne({ _id: chatroomId });

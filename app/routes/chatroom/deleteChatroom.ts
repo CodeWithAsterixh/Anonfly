@@ -10,9 +10,9 @@ const deleteChatroomRoute: Omit<RouteConfig, 'app'> = {
   handler: withErrorHandling(async (event) => {
     const { req, params } = event;
     const { id: chatroomId } = params;
-    const userId = (req.user as any)?._id;
+    const userAid = (req as any)?.userAid;
 
-    if (!userId) {
+    if (!userAid) {
       return {
         message: 'User not authenticated',
         statusCode: 401,
@@ -42,7 +42,7 @@ const deleteChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // Check if the authenticated user is the host of the chatroom
-    if (chatroom.hostUserId.toString() !== userId.toString()) {
+    if (chatroom.hostAid !== userAid) {
       return {
         message: 'Unauthorized: Only the host can delete this chatroom',
         statusCode: 403,

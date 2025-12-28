@@ -2,10 +2,11 @@
 import { Router } from 'express';
 import ChatRoom from '../../../lib/models/chatRoom';
 import type { IParticipant } from '../../../lib/models/chatRoom';
+import { verifyToken } from '../../../lib/middlewares/verifyToken';
 
 const router = Router();
 
-router.get('/chatrooms', async (req, res) => {
+router.get('/chatrooms', verifyToken, async (req, res) => {
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -20,7 +21,7 @@ router.get('/chatrooms', async (req, res) => {
         {
           $addFields: {
             lastMessage: {
-              $arrayElemAt: ["$messages", -1] // Get the last message from the embedded array
+              $arrayElemAt: ["$messages", -1]
             }
           }
         },
@@ -29,26 +30,25 @@ router.get('/chatrooms', async (req, res) => {
             _id: 1,
             roomname: 1,
             description: 1,
-            hostUserId: 1,
+            hostAid: 1,
             participants: 1,
-            lastMessage: "$lastMessage.content", // Extract content of the last message
+            lastMessage: "$lastMessage.content",
           }
         }
       ]);
 
       const chatroomList = chatrooms.map(room => {
         const lastMessageContent = room.lastMessage || null;
-        // NOTE: This part assumes req.user is populated by an authentication middleware
-        // and contains the authenticated user's _id.
-        const isParticipant = room.participants.some((p: IParticipant) => p.userId.toString() === (req.user as any)?._id?.toString());
+        const userAid = (req as any).userAid;
+        const isParticipant = room.participants.some((p: IParticipant) => p.userAid === userAid);
 
         return {
           id: room._id,
           roomname: room.roomname,
           description: room.description,
-          hostUserId: room.hostUserId,
+          hostAid: room.hostAid,
           participantCount: room.participants.length,
-          lastMessage: isParticipant ? lastMessageContent : null, // Only show preview if participant
+          lastMessage: isParticipant ? lastMessageContent : null,
         };
       });
 

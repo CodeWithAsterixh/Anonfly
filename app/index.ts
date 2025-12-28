@@ -20,6 +20,7 @@ import withErrorHandling from "../lib/middlewares/withErrorHandling";
 import { addMessageToCache, getCachedMessages } from '../lib/helpers/messageCache';
 import cleanupChatroom from '../lib/helpers/cleanupChatroom';
 import ChatRoom, { type IMessage } from '../lib/models/chatRoom';
+import { verifySignature } from '../lib/helpers/crypto';
 
 // Routes
 import chatroomListRouter from "./routes/chatroom/chatroomlist";
@@ -31,10 +32,8 @@ import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
 import editChatroomRoute from "./routes/chatroom/editChatroom";
 import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
 import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
-import createUserRoute from "./routes/user/createUser";
-import loginRoute from "./routes/auth/login";
-import getUserRoute from "./routes/auth/getUser";
-import deleteUserRoute from "./routes/user/deleteUser";
+import challengeRoute from "./routes/auth/challenge";
+import verifyRoute from "./routes/auth/verify";
 
 import homeRoute from "./routes/homeRoute";
 import healthzRoute from "./routes/healthzRoute";
@@ -104,13 +103,8 @@ router(getChatroomMessagesRoute);
 
 router(deleteMessageRoute); // Use the new route
 
-router(createUserRoute);
-
-router(loginRoute);
-
-router(getUserRoute);
-
-router(deleteUserRoute);
+router(challengeRoute);
+router(verifyRoute);
 
 router(joinChatroomRoute);
 
@@ -132,11 +126,11 @@ const wss = new WebSocketServer({ server });
 interface CustomWebSocket extends WebSocket {
   id: string;
   isAlive: boolean;
-  userId?: string; // Optional: to store the authenticated user's ID
-  chatroomId?: string; // Optional: to store the chatroom the user is in
-  username?: string; // Optional: to store the authenticated user's username
-  syncing?: boolean; // true while server is sending cached messages
-  messageQueue?: any[]; // queue messages received during syncing
+  userAid?: string; // Anonymous Identity
+  chatroomId?: string; 
+  username?: string; 
+  syncing?: boolean; 
+  messageQueue?: any[]; 
 }
 
 export const clients = new Map<string, CustomWebSocket>();
@@ -165,11 +159,11 @@ function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
   // Notify remaining participants that this user left/disconnected
   try {
     const remaining = activeChatrooms.get(chatroomId);
-    if (remaining && ws.userId) {
+    if (remaining && ws.userAid) {
       const leaveNotice = JSON.stringify({
         type: 'userLeft',
         chatroomId,
-        userId: ws.userId,
+        userAid: ws.userAid,
         username: ws.username,
         timestamp: new Date().toISOString(),
       });
@@ -185,25 +179,24 @@ function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
   }
 
   // Also remove the participant from the persistent chatroom participants list
-  // This makes participant membership ephemeral (only while connected)
   (async () => {
     try {
-      if (!ws.userId) return;
+      if (!ws.userAid) return;
       const chatroom = await ChatRoom.findById(chatroomId);
       if (!chatroom) return;
-      const participantIndex = chatroom.participants.findIndex(p => p.userId.toString() === ws.userId?.toString());
+      const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
       if (participantIndex === -1) return;
 
       // Remove user from participants list
       chatroom.participants.splice(participantIndex, 1);
 
       // If the leaving user is the host, transfer host status or delete chatroom
-      if (chatroom.hostUserId.toString() === ws.userId?.toString()) {
+      if (chatroom.hostAid === ws.userAid) {
         if (chatroom.participants.length > 0) {
           const newHost = chatroom.participants.reduce((prev, curr) => {
             return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
           }, chatroom.participants[0]);
-          chatroom.hostUserId = new mongoose.Types.ObjectId(newHost.userId);
+          chatroom.hostAid = newHost.userAid;
         } else {
           // No participants left: clear cache and delete chatroom
           await cleanupChatroom(chatroomId);
@@ -212,9 +205,9 @@ function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
       }
 
       await chatroom.save();
-      logger.info(`Removed participant ${ws.userId} from chatroom ${chatroomId} in DB`);
+      logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB`);
     } catch (err) {
-      logger.error(`Error removing participant ${ws.userId} from chatroom ${chatroomId}: ${err}`);
+      logger.error(`Error removing participant ${ws.userAid} from chatroom ${chatroomId}: ${err}`);
     }
   })();
 }
@@ -241,12 +234,33 @@ wss.on('connection', (ws: WebSocket) => {
       return;
     }
 
-    if (parsedMessage.type === 'joinChatroom' && parsedMessage.chatroomId && parsedMessage.userId && parsedMessage.username) {
+    if (parsedMessage.type === 'joinChatroom' && parsedMessage.chatroomId && parsedMessage.userAid && parsedMessage.username) {
       wsClient.syncing = true;
-      wsClient.userId = parsedMessage.userId;
+      wsClient.userAid = parsedMessage.userAid;
       wsClient.username = parsedMessage.username;
       addClientToChatroom(parsedMessage.chatroomId, wsClient);
-      wsClient.send(JSON.stringify({ type: 'joinSuccess', chatroomId: parsedMessage.chatroomId }));
+
+      const chatroom = await ChatRoom.findById(parsedMessage.chatroomId);
+      if (!chatroom) {
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Chatroom not found' }));
+        wsClient.syncing = false;
+        return;
+      }
+
+      const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
+      const publicKey = participant?.publicKey;
+      const exchangePublicKey = participant?.exchangePublicKey;
+
+      wsClient.send(JSON.stringify({ 
+        type: 'joinSuccess', 
+        chatroomId: parsedMessage.chatroomId,
+        participants: chatroom.participants.map(p => ({
+          userAid: p.userAid,
+          username: p.username,
+          publicKey: p.publicKey,
+          exchangePublicKey: p.exchangePublicKey
+        }))
+      }));
 
       // Notify other participants that a user has joined
       try {
@@ -255,8 +269,10 @@ wss.on('connection', (ws: WebSocket) => {
           const joinNotice = JSON.stringify({
             type: 'userJoined',
             chatroomId: parsedMessage.chatroomId,
-            userId: wsClient.userId,
+            userAid: wsClient.userAid,
             username: wsClient.username,
+            publicKey,
+            exchangePublicKey,
             timestamp: new Date().toISOString(),
           });
           chatroomClients.forEach(client => {
@@ -277,9 +293,10 @@ wss.on('connection', (ws: WebSocket) => {
           wsClient.send(JSON.stringify({
             type: 'chatMessage',
             chatroomId: msg.chatroomId,
-            senderId: msg.senderId,
+            senderAid: msg.senderAid || msg.senderId, // Support both for transition
             senderUsername: msg.senderUsername,
             content: msg.content,
+            signature: msg.signature,
             timestamp: new Date(msg.timestamp).toISOString(),
           }));
         }
@@ -309,30 +326,18 @@ wss.on('connection', (ws: WebSocket) => {
 
     // Handle sending a chat message
     if (parsedMessage.type === 'message' && parsedMessage.chatroomId && parsedMessage.content) {
-      if (!wsClient.userId || !wsClient.chatroomId) {
+      if (!wsClient.userAid || !wsClient.chatroomId) {
         logger.warn(`Message received from unauthenticated or unjoined client: ${wsClient.id}`);
         wsClient.send(JSON.stringify({ type: 'error', message: 'Not authenticated or not in a chatroom' }));
         return;
       }
 
-      const { chatroomId, content } = parsedMessage;
+      const { chatroomId, content, signature } = parsedMessage;
       if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
         logger.warn(`Invalid chatroomId received from ${wsClient.id}: ${chatroomId}`);
         wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid chatroom ID' }));
         return;
       }
-      if (!mongoose.Types.ObjectId.isValid(wsClient.userId)) {
-        logger.warn(`Invalid userId on customWs from ${wsClient.id}: ${wsClient.userId}`);
-        wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid user ID' }));
-        return;
-      }
-
-      const newMessage: IMessage = {
-        _id: new mongoose.Types.ObjectId(),
-        senderUserId: new mongoose.Types.ObjectId(wsClient.userId),
-        content,
-        timestamp: new Date(),
-      };
 
       const chatroom = await ChatRoom.findById(chatroomId);
       if (!chatroom) {
@@ -340,14 +345,37 @@ wss.on('connection', (ws: WebSocket) => {
         wsClient.send(JSON.stringify({ type: 'error', message: 'Chatroom not found' }));
         return;
       }
+
+      // Verify signature if present
+      if (signature) {
+        const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
+        if (participant && participant.publicKey) {
+          const isValid = verifySignature(btoa(content), signature, participant.publicKey);
+          if (!isValid) {
+            logger.warn(`Invalid signature from ${wsClient.userAid} in chatroom ${chatroomId}`);
+            wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid message signature' }));
+            return;
+          }
+        }
+      }
+
+      const newMessage: IMessage = {
+        _id: new mongoose.Types.ObjectId(),
+        senderAid: wsClient.userAid,
+        content,
+        signature,
+        timestamp: new Date(),
+      };
+
       chatroom.messages.push(newMessage);
       await chatroom.save();
 
       addMessageToCache(chatroomId, {
         chatroomId: new mongoose.Types.ObjectId(chatroomId),
-        senderId: newMessage.senderUserId,
+        senderAid: newMessage.senderAid,
         senderUsername: wsClient.username || 'Anonymous',
         content: newMessage.content,
+        signature,
         timestamp: newMessage.timestamp,
       } as any);
 
@@ -356,10 +384,11 @@ wss.on('connection', (ws: WebSocket) => {
         const messageToBroadcast = JSON.stringify({
           type: 'chatMessage',
           chatroomId,
-          senderId: wsClient.userId,
+          senderAid: wsClient.userAid,
           senderUsername: wsClient.username || 'Anonymous',
           content,
-          timestamp: new Date().toISOString(),
+          signature,
+          timestamp: newMessage.timestamp.toISOString(),
         });
         chatroomClients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
@@ -373,6 +402,26 @@ wss.on('connection', (ws: WebSocket) => {
       }
       return;
     }
+
+    // Broadcast unknown message types to the chatroom (for client-side signaling like E2EE key exchange)
+    if (parsedMessage.chatroomId && wsClient.chatroomId === parsedMessage.chatroomId) {
+      const chatroomClients = activeChatrooms.get(parsedMessage.chatroomId);
+      if (chatroomClients) {
+        const signalToBroadcast = JSON.stringify({
+          ...parsedMessage,
+          senderAid: wsClient.userAid,
+          senderUsername: wsClient.username,
+        });
+        chatroomClients.forEach(client => {
+          if (client.id !== wsClient.id && client.readyState === WebSocket.OPEN) {
+            client.send(signalToBroadcast);
+          }
+        });
+      }
+      return;
+    }
+
+    wsClient.send(JSON.stringify({ type: 'error', message: 'Unknown message type or invalid chatroom' }));
   }
 
   customWs.on('message', async message => {

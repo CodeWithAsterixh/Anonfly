@@ -12,7 +12,7 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
   handler: withErrorHandling(async (event) => {
     const { req, params } = event;
     const { chatroomId, messageId } = params as { chatroomId: string; messageId: string };
-    const userId = (req.user as any)._id;
+    const userAid = (req as any).userAid;
 
     const chatroom = await ChatRoom.findById(chatroomId);
 
@@ -36,7 +36,7 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    if (chatroom.messages[messageIndex].senderUserId.toString() !== userId.toString()) {
+    if (chatroom.messages[messageIndex].senderAid !== userAid) {
       return {
         message: 'You are not authorized to delete this message',
         statusCode: 403,
