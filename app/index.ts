@@ -345,14 +345,31 @@ wss.on('connection', (ws: WebSocket) => {
       return;
     }
 
-    // Handle saving room key (host only)
+    // Handle saving room key (allow first set)
     if (parsedMessage.type === 'saveRoomKey' && parsedMessage.chatroomId && parsedMessage.encryptedKey) {
       const chatroom = await ChatRoom.findById(parsedMessage.chatroomId);
-      if (chatroom && chatroom.hostAid === wsClient.userAid) {
+      // Allow saving if room has no key yet OR if the sender is the host
+      if (chatroom && (!chatroom.encryptedRoomKey || chatroom.hostAid === wsClient.userAid)) {
         chatroom.encryptedRoomKey = parsedMessage.encryptedKey;
-        chatroom.roomKeyIv = parsedMessage.iv;
+        chatroom.roomKeyIv = parsedMessage.iv || 'none';
         await chatroom.save();
-        logger.info(`Saved encrypted room key for chatroom ${parsedMessage.chatroomId}`);
+        logger.info(`Saved master room key for chatroom ${parsedMessage.chatroomId}`);
+
+        // Broadcast the new master key to everyone in the room
+        const chatroomClients = activeChatrooms.get(parsedMessage.chatroomId);
+        if (chatroomClients) {
+          const keyUpdate = JSON.stringify({
+            type: 'masterKeyUpdate',
+            chatroomId: parsedMessage.chatroomId,
+            encryptedRoomKey: chatroom.encryptedRoomKey,
+            roomKeyIv: chatroom.roomKeyIv
+          });
+          chatroomClients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(keyUpdate);
+            }
+          });
+        }
       }
       return;
     }
