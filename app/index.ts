@@ -172,6 +172,23 @@ async function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket)
           const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
           if (participantIndex !== -1) {
             chatroom.participants.splice(participantIndex, 1);
+            
+            // If the disconnected user was the host, transfer host status to the earliest joined participant
+            if (chatroom.hostAid === ws.userAid) {
+              if (chatroom.participants.length > 0) {
+                // Find participant with the earliest joinedAt date
+                const newHost = chatroom.participants.reduce((prev, curr) => {
+                  const prevDate = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
+                  const currDate = curr.joinedAt ? new Date(curr.joinedAt).getTime() : Infinity;
+                  return prevDate < currDate ? prev : curr;
+                }, chatroom.participants[0]);
+                chatroom.hostAid = newHost.userAid;
+                logger.info(`Host status transferred to ${newHost.userAid} in chatroom ${chatroomId} after disconnect`);
+              } else {
+                chatroom.hostAid = ""; // No participants left
+              }
+            }
+
             await chatroom.save();
             chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
             logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB due to disconnect`);
@@ -246,14 +263,16 @@ async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
     // If the leaving user is the host, transfer host status if possible
     if (chatroom.hostAid === ws.userAid) {
       if (chatroom.participants.length > 0) {
+        // Find participant with the earliest joinedAt date
         const newHost = chatroom.participants.reduce((prev, curr) => {
-          return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
+          const prevDate = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
+          const currDate = curr.joinedAt ? new Date(curr.joinedAt).getTime() : Infinity;
+          return prevDate < currDate ? prev : curr;
         }, chatroom.participants[0]);
         chatroom.hostAid = newHost.userAid;
+        logger.info(`Host status transferred to ${newHost.userAid} in chatroom ${chatroomId} (explicit leave)`);
       } else {
-        // No participants left: Don't delete immediately. 
-        // Keep the room so users can return. The background timer in removeClientFromChatroom
-        // or a global cleanup will handle truly abandoned rooms.
+        chatroom.hostAid = ""; // No participants left
         logger.info(`Chatroom ${chatroomId} is now empty but preserved for 24 hours.`);
       }
     }
@@ -316,6 +335,10 @@ wss.on('connection', (ws: WebSocket) => {
           username: wsClient.username,
           joinedAt: new Date()
         });
+        // If no host, set as host
+        if (!chatroom.hostAid) {
+          chatroom.hostAid = wsClient.userAid;
+        }
         await chatroom.save();
         chatEventEmitter.emit(`chatroomUpdated:${parsedMessage.chatroomId}`);
       }
