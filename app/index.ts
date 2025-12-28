@@ -282,6 +282,9 @@ wss.on('connection', (ws: WebSocket) => {
       wsClient.send(JSON.stringify({ 
         type: 'joinSuccess', 
         chatroomId: parsedMessage.chatroomId,
+        encryptedRoomKey: chatroom.encryptedRoomKey,
+        roomKeyIv: chatroom.roomKeyIv,
+        hostAid: chatroom.hostAid,
         participants: chatroom.participants.map(p => ({
           userAid: p.userAid,
           username: p.username,
@@ -320,6 +323,7 @@ wss.on('connection', (ws: WebSocket) => {
         for (const msg of cachedMessages) {
           wsClient.send(JSON.stringify({
             type: 'chatMessage',
+            messageId: msg._id || msg.id,
             chatroomId: msg.chatroomId,
             senderAid: msg.senderAid || msg.senderId, // Support both for transition
             senderUsername: msg.senderUsername,
@@ -337,6 +341,18 @@ wss.on('connection', (ws: WebSocket) => {
       const queued = wsClient.messageQueue ? wsClient.messageQueue.splice(0) : [];
       for (const qm of queued) {
         await handleParsedMessage(wsClient, qm);
+      }
+      return;
+    }
+
+    // Handle saving room key (host only)
+    if (parsedMessage.type === 'saveRoomKey' && parsedMessage.chatroomId && parsedMessage.encryptedKey) {
+      const chatroom = await ChatRoom.findById(parsedMessage.chatroomId);
+      if (chatroom && chatroom.hostAid === wsClient.userAid) {
+        chatroom.encryptedRoomKey = parsedMessage.encryptedKey;
+        chatroom.roomKeyIv = parsedMessage.iv;
+        await chatroom.save();
+        logger.info(`Saved encrypted room key for chatroom ${parsedMessage.chatroomId}`);
       }
       return;
     }
@@ -412,6 +428,7 @@ wss.on('connection', (ws: WebSocket) => {
       if (chatroomClients) {
         const messageToBroadcast = JSON.stringify({
           type: 'chatMessage',
+          messageId: newMessage._id,
           chatroomId,
           senderAid: wsClient.userAid,
           senderUsername: wsClient.username || 'Anonymous',

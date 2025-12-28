@@ -43,12 +43,16 @@ export interface IChatRoom extends Document {
   hostAid: string;
   participants: IParticipant[];
   messages: IMessage[];
+  encryptedRoomKey?: string; // Encrypted for the host
+  roomKeyIv?: string;
 }
 
 const ChatRoomSchema = new Schema<IChatRoom>({
   roomname: { type: String, required: true, unique: true },
   description: { type: String, default: "" },
   hostAid: { type: String, required: true },
+  encryptedRoomKey: { type: String },
+  roomKeyIv: { type: String },
   participants: [ParticipantSchema],
   messages: [new Schema({
     senderAid: { type: String, required: true },
