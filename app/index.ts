@@ -4,6 +4,7 @@ import cors from "cors";
 import express from "express";
 import { WebSocketServer, WebSocket } from 'ws';
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 
 // Security middleware
 
@@ -317,8 +318,6 @@ wss.on('connection', (ws: WebSocket) => {
       wsClient.syncing = true;
       wsClient.userAid = parsedMessage.userAid;
       wsClient.username = parsedMessage.username;
-      addClientToChatroom(parsedMessage.chatroomId, wsClient);
-
       const chatroom = await ChatRoom.findById(parsedMessage.chatroomId);
       if (!chatroom) {
         wsClient.send(JSON.stringify({ type: 'error', message: 'Chatroom not found' }));
@@ -327,6 +326,29 @@ wss.on('connection', (ws: WebSocket) => {
       }
 
       const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
+      
+      // Password verification for locked rooms
+      if (chatroom.isLocked && chatroom.password && !participant) {
+        const password = parsedMessage.password;
+        if (!password) {
+          wsClient.send(JSON.stringify({ 
+            type: 'error', 
+            message: 'Password required for this chatroom',
+            requiresPassword: true 
+          }));
+          wsClient.syncing = false;
+          return;
+        }
+
+        const isMatch = await bcrypt.compare(password, chatroom.password);
+        if (!isMatch) {
+          wsClient.send(JSON.stringify({ type: 'error', message: 'Incorrect password' }));
+          wsClient.syncing = false;
+          return;
+        }
+      }
+
+      addClientToChatroom(parsedMessage.chatroomId, wsClient);
       
       if (!participant && wsClient.username && wsClient.userAid) {
         // If not a participant yet, add them (this handles cases where /join wasn't called or failed)
