@@ -136,6 +136,8 @@ interface CustomWebSocket extends WebSocket {
 export const clients = new Map<string, CustomWebSocket>();
 export const activeChatrooms = new Map<string, Map<string, CustomWebSocket>>(); // chatroomId -> Map<wsId, CustomWebSocket>
 
+const chatroomCleanupTimeouts = new Map<string, NodeJS.Timeout>();
+
 function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   if (!activeChatrooms.has(chatroomId)) {
     activeChatrooms.set(chatroomId, new Map<string, CustomWebSocket>());
@@ -143,6 +145,14 @@ function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   activeChatrooms.get(chatroomId)?.set(ws.id, ws);
   ws.chatroomId = chatroomId;
   logger.info(`Client ${ws.id} added to chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size}`);
+
+  // Clear any pending cleanup timeout for this chatroom
+  const existingTimeout = chatroomCleanupTimeouts.get(chatroomId);
+  if (existingTimeout) {
+    clearTimeout(existingTimeout);
+    chatroomCleanupTimeouts.delete(chatroomId);
+    logger.info(`Cleared cleanup timeout for chatroom ${chatroomId} as a user joined`);
+  }
 }
 
 function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
@@ -151,9 +161,26 @@ function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
     chatroomClients.delete(ws.id);
     if (chatroomClients.size === 0) {
       activeChatrooms.delete(chatroomId);
+
+      // Start a 10-minute cleanup timer when the last user leaves
+      const timeout = setTimeout(async () => {
+        try {
+          const chatroom = await ChatRoom.findById(chatroomId);
+          if (chatroom && chatroom.participants.length === 0) {
+            await cleanupChatroom(chatroomId);
+            logger.info(`Chatroom ${chatroomId} deleted after 10 minutes of inactivity`);
+          }
+          chatroomCleanupTimeouts.delete(chatroomId);
+        } catch (err) {
+          logger.error(`Error in delayed chatroom cleanup for ${chatroomId}: ${err}`);
+        }
+      }, 10 * 60 * 1000); // 10 minutes
+
+      chatroomCleanupTimeouts.set(chatroomId, timeout);
+      logger.info(`Started 10-minute cleanup timeout for chatroom ${chatroomId}`);
     }
     delete ws.chatroomId;
-    logger.info(`Client ${ws.id} removed from chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size}`);
+    logger.info(`Client ${ws.id} removed from chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size || 0}`);
   }
 
   // Notify remaining participants that this user left/disconnected
@@ -177,39 +204,40 @@ function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
   } catch (err) {
     logger.error(`Failed to broadcast userLeft for ${ws.id}: ${err}`);
   }
+}
 
-  // Also remove the participant from the persistent chatroom participants list
-  (async () => {
-    try {
-      if (!ws.userAid) return;
-      const chatroom = await ChatRoom.findById(chatroomId);
-      if (!chatroom) return;
-      const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
-      if (participantIndex === -1) return;
+// Separate function for explicit room leave (removes participant from DB)
+async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
+  try {
+    if (!ws.userAid) return;
+    const chatroom = await ChatRoom.findById(chatroomId);
+    if (!chatroom) return;
 
-      // Remove user from participants list
-      chatroom.participants.splice(participantIndex, 1);
+    const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
+    if (participantIndex === -1) return;
 
-      // If the leaving user is the host, transfer host status or delete chatroom
-      if (chatroom.hostAid === ws.userAid) {
-        if (chatroom.participants.length > 0) {
-          const newHost = chatroom.participants.reduce((prev, curr) => {
-            return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
-          }, chatroom.participants[0]);
-          chatroom.hostAid = newHost.userAid;
-        } else {
-          // No participants left: clear cache and delete chatroom
-          await cleanupChatroom(chatroomId);
-          return;
-        }
+    // Remove user from participants list in DB
+    chatroom.participants.splice(participantIndex, 1);
+
+    // If the leaving user is the host, transfer host status
+    if (chatroom.hostAid === ws.userAid) {
+      if (chatroom.participants.length > 0) {
+        const newHost = chatroom.participants.reduce((prev, curr) => {
+          return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
+        }, chatroom.participants[0]);
+        chatroom.hostAid = newHost.userAid;
+      } else {
+        // No participants left: clear cache and delete chatroom
+        await cleanupChatroom(chatroomId);
+        return;
       }
-
-      await chatroom.save();
-      logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB`);
-    } catch (err) {
-      logger.error(`Error removing participant ${ws.userAid} from chatroom ${chatroomId}: ${err}`);
     }
-  })();
+
+    await chatroom.save();
+    logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB (explicit leave)`);
+  } catch (err) {
+    logger.error(`Error handling explicit leave for participant ${ws.userAid} in chatroom ${chatroomId}: ${err}`);
+  }
 }
 
 wss.on('connection', (ws: WebSocket) => {
@@ -317,6 +345,7 @@ wss.on('connection', (ws: WebSocket) => {
     if (parsedMessage.type === 'leaveChatroom' && parsedMessage.chatroomId) {
       if (wsClient.chatroomId === parsedMessage.chatroomId) {
         removeClientFromChatroom(parsedMessage.chatroomId, wsClient);
+        await handleExplicitLeave(parsedMessage.chatroomId, wsClient);
         wsClient.send(JSON.stringify({ type: 'leaveSuccess', chatroomId: parsedMessage.chatroomId }));
       } else {
         wsClient.send(JSON.stringify({ type: 'error', message: 'Not in the specified chatroom' }));
