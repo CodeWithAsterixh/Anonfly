@@ -162,22 +162,23 @@ function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
     if (chatroomClients.size === 0) {
       activeChatrooms.delete(chatroomId);
 
-      // Start a 10-minute cleanup timer when the last user leaves
+      // Start a 24-hour cleanup timer when the last user leaves the memory map
       const timeout = setTimeout(async () => {
         try {
           const chatroom = await ChatRoom.findById(chatroomId);
+          // Only delete if the room is still empty after 24 hours
           if (chatroom && chatroom.participants.length === 0) {
             await cleanupChatroom(chatroomId);
-            logger.info(`Chatroom ${chatroomId} deleted after 10 minutes of inactivity`);
+            logger.info(`Chatroom ${chatroomId} deleted after 24 hours of inactivity`);
           }
           chatroomCleanupTimeouts.delete(chatroomId);
         } catch (err) {
           logger.error(`Error in delayed chatroom cleanup for ${chatroomId}: ${err}`);
         }
-      }, 10 * 60 * 1000); // 10 minutes
+      }, 24 * 60 * 60 * 1000); // 24 hours
 
       chatroomCleanupTimeouts.set(chatroomId, timeout);
-      logger.info(`Started 10-minute cleanup timeout for chatroom ${chatroomId}`);
+      logger.info(`Started 24-hour cleanup timeout for chatroom ${chatroomId}`);
     }
     delete ws.chatroomId;
     logger.info(`Client ${ws.id} removed from chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size || 0}`);
@@ -219,7 +220,7 @@ async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
     // Remove user from participants list in DB
     chatroom.participants.splice(participantIndex, 1);
 
-    // If the leaving user is the host, transfer host status
+    // If the leaving user is the host, transfer host status if possible
     if (chatroom.hostAid === ws.userAid) {
       if (chatroom.participants.length > 0) {
         const newHost = chatroom.participants.reduce((prev, curr) => {
@@ -227,9 +228,10 @@ async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
         }, chatroom.participants[0]);
         chatroom.hostAid = newHost.userAid;
       } else {
-        // No participants left: clear cache and delete chatroom
-        await cleanupChatroom(chatroomId);
-        return;
+        // No participants left: Don't delete immediately. 
+        // Keep the room so users can return. The background timer in removeClientFromChatroom
+        // or a global cleanup will handle truly abandoned rooms.
+        logger.info(`Chatroom ${chatroomId} is now empty but preserved for 24 hours.`);
       }
     }
 
@@ -263,6 +265,12 @@ wss.on('connection', (ws: WebSocket) => {
     }
 
     if (parsedMessage.type === 'joinChatroom' && parsedMessage.chatroomId && parsedMessage.userAid && parsedMessage.username) {
+      // If the client is already in a chatroom, remove them from the previous one first
+      if (wsClient.chatroomId && wsClient.chatroomId !== parsedMessage.chatroomId) {
+        logger.info(`Client ${wsClient.id} switching from room ${wsClient.chatroomId} to ${parsedMessage.chatroomId}`);
+        removeClientFromChatroom(wsClient.chatroomId, wsClient);
+      }
+
       wsClient.syncing = true;
       wsClient.userAid = parsedMessage.userAid;
       wsClient.username = parsedMessage.username;

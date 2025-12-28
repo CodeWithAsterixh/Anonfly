@@ -56,7 +56,7 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
     // Remove user from participants list
     chatroom.participants.splice(participantIndex, 1);
 
-    // If the leaving user is the host, transfer host status
+    // If the leaving user is the host, transfer host status if possible
     if (chatroom.hostAid === userAid) {
       if (chatroom.participants.length > 0) {
         // Find participant with the closest timestamp to be the new host
@@ -65,10 +65,11 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
         }, chatroom.participants[0]);
         chatroom.hostAid = newHost.userAid;
       } else {
-        // If no participants left, delete the chatroom
-        await ChatRoom.deleteOne({ _id: chatroomId });
+        // If no participants left, preserve the room for a while
+        // The background cleanup job or websocket cleanup will handle deletion
+        await chatroom.save();
         return {
-          message: 'Chatroom left and deleted as no participants remain',
+          message: 'Successfully left chatroom. Room is preserved while empty.',
           statusCode: 200,
           success: true,
           status: 'good',
