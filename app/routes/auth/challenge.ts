@@ -20,7 +20,7 @@ const challengeRoute: Omit<RouteConfig, 'app'> = {
     }
 
     const nonce = uuidv4();
-    challengeStore.set(aid, nonce);
+    await challengeStore.set(aid, nonce);
 
     return {
       message: 'Challenge generated',

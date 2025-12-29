@@ -21,7 +21,7 @@ const verifyToken = async (req: AuthenticatedRequest, res: pkg.Response, next: p
       throw new Error('Authentication failed: No session token provided');
     }
 
-    const session = sessionStore.get(token);
+    const session = await sessionStore.get(token);
 
     if (!session) {
       throw new Error('Authentication failed: Invalid or expired session');

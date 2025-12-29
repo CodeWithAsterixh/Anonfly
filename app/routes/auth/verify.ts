@@ -26,7 +26,7 @@ const verifyRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    const nonce = challengeStore.get(aid);
+    const nonce = await challengeStore.get(aid);
     if (!nonce) {
       return {
         message: 'Challenge expired or not found',
@@ -65,11 +65,11 @@ const verifyRoute: Omit<RouteConfig, 'app'> = {
       }
 
       // Cleanup challenge
-      challengeStore.delete(aid);
+      await challengeStore.delete(aid);
 
       // Create session
       const token = uuidv4();
-      sessionStore.set(token, {
+      await sessionStore.set(token, {
         aid,
         username,
         publicKey,

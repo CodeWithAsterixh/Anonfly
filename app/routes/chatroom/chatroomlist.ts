@@ -76,12 +76,14 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
     }
   };
 
-  // Listen for chatroom creation events
+  // Listen for chatroom creation and deletion events
   chatEventEmitter.on('chatroomCreated', sendUpdate);
+  chatEventEmitter.on('chatroomDeleted', sendUpdate);
 
   // Clean up when connection closes
   req.on('close', () => {
     chatEventEmitter.off('chatroomCreated', sendUpdate);
+    chatEventEmitter.off('chatroomDeleted', sendUpdate);
     res.end();
   });
 });

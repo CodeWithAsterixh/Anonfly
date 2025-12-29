@@ -2,6 +2,7 @@ import ChatRoom from '../../../lib/models/chatRoom';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
+import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 
 const deleteChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'delete',
@@ -52,6 +53,10 @@ const deleteChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     await ChatRoom.deleteOne({ _id: chatroomId });
+
+    // Emit events for real-time updates
+    chatEventEmitter.emit('chatroomDeleted', chatroomId);
+    chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`, { deleted: true });
 
     return {
       message: 'Chatroom deleted successfully',
