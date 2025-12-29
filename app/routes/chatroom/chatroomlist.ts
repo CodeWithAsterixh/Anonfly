@@ -1,9 +1,9 @@
-/// <reference path="../../../lib/types/express.d.ts" />
 import { Router } from 'express';
 import ChatRoom from '../../../lib/models/chatRoom';
 import type { IParticipant } from '../../../lib/models/chatRoom';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
+import { getCachedChatroomList, cacheChatroomList, invalidateChatroomList } from '../../../lib/helpers/messageCache';
 
 const router = Router();
 
@@ -11,26 +11,34 @@ const router = Router();
  * Fetches the list of chatrooms and formats them for the client.
  */
 async function getFormattedChatroomList(userAid: string) {
-  const chatrooms = await ChatRoom.aggregate([
-    {
-      $addFields: {
-        lastMessage: {
-          $arrayElemAt: ["$messages", -1]
+  // Try to get raw list from cache
+  let chatrooms = await getCachedChatroomList();
+
+  if (!chatrooms) {
+    chatrooms = await ChatRoom.aggregate([
+      {
+        $addFields: {
+          lastMessage: {
+            $arrayElemAt: ["$messages", -1]
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          roomname: 1,
+          description: 1,
+          hostAid: 1,
+          participants: 1,
+          isLocked: 1,
+          lastMessage: "$lastMessage.content",
         }
       }
-    },
-    {
-      $project: {
-        _id: 1,
-        roomname: 1,
-        description: 1,
-        hostAid: 1,
-        participants: 1,
-        isLocked: 1,
-        lastMessage: "$lastMessage.content",
-      }
-    }
-  ]);
+    ]);
+    
+    // Cache the raw list
+    await cacheChatroomList(chatrooms);
+  }
 
   return chatrooms.map(room => {
     const lastMessageContent = room.lastMessage || null;
@@ -62,13 +70,15 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
     const chatroomList = await getFormattedChatroomList(userAid);
     res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
   } catch (error) {
-    // Silently fail initial send, the listener might catch next update
+    // Silently fail initial send
   }
 
   // Define the update handler
   const sendUpdate = async () => {
     try {
       if (res.writableEnded) return;
+      // Invalidate cache before fetching new list
+      await invalidateChatroomList();
       const chatroomList = await getFormattedChatroomList(userAid);
       res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
     } catch (error) {
@@ -76,14 +86,16 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
     }
   };
 
-  // Listen for chatroom creation and deletion events
+  // Listen for all relevant events that should update the list
   chatEventEmitter.on('chatroomCreated', sendUpdate);
   chatEventEmitter.on('chatroomDeleted', sendUpdate);
+  chatEventEmitter.on('chatroomListUpdated', sendUpdate);
 
   // Clean up when connection closes
   req.on('close', () => {
     chatEventEmitter.off('chatroomCreated', sendUpdate);
     chatEventEmitter.off('chatroomDeleted', sendUpdate);
+    chatEventEmitter.off('chatroomListUpdated', sendUpdate);
     res.end();
   });
 });

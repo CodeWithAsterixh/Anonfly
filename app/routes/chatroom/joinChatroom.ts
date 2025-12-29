@@ -92,6 +92,7 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
 
     // Emit event for real-time updates
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
+    chatEventEmitter.emit('chatroomListUpdated');
 
     return {
       message: 'Successfully joined chatroom',

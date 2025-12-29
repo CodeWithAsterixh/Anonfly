@@ -18,7 +18,7 @@ import env from "../lib/constants/env";
 import useRouter from "../lib/middlewares/routeHandler";
 import helmetMiddleware from "../lib/middlewares/securityHeaders";
 import withErrorHandling from "../lib/middlewares/withErrorHandling";
-import { addMessageToCache, getCachedMessages } from '../lib/helpers/messageCache';
+import { addMessageToCache, getCachedMessages, cacheMessages } from '../lib/helpers/messageCache';
 import cleanupChatroom from '../lib/helpers/cleanupChatroom';
 import ChatRoom, { type IMessage } from '../lib/models/chatRoom';
 import { verifySignature } from '../lib/helpers/crypto';
@@ -280,6 +280,7 @@ async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
 
     await chatroom.save();
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
+    chatEventEmitter.emit('chatroomListUpdated');
     logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB (explicit leave)`);
   } catch (err) {
     logger.error(`Error handling explicit leave for participant ${ws.userAid} in chatroom ${chatroomId}: ${err}`);
@@ -363,6 +364,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
         await chatroom.save();
         chatEventEmitter.emit(`chatroomUpdated:${parsedMessage.chatroomId}`);
+        chatEventEmitter.emit('chatroomListUpdated');
       }
       
       const publicKey = participant?.publicKey;
@@ -408,14 +410,32 @@ wss.on('connection', (ws: WebSocket) => {
 
       // Send cached messages to the newly joined client before processing other client messages
       try {
-        const cachedMessages = await getCachedMessages(parsedMessage.chatroomId);
+        let cachedMessages = await getCachedMessages(parsedMessage.chatroomId);
+        
+        // If cache is empty, fetch from MongoDB and populate cache
+        if (cachedMessages.length === 0 && chatroom) {
+          logger.debug(`Cache miss for chatroom ${parsedMessage.chatroomId}, fetching from DB`);
+          // Get last 50 messages from the chatroom document we already fetched
+          cachedMessages = chatroom.messages.slice(-50).map(msg => {
+            const plainMsg = (msg as any).toObject ? (msg as any).toObject() : msg;
+            return {
+              ...plainMsg,
+              chatroomId: parsedMessage.chatroomId
+            };
+          });
+          
+          if (cachedMessages.length > 0) {
+            await cacheMessages(parsedMessage.chatroomId, cachedMessages);
+          }
+        }
+
         for (const msg of cachedMessages) {
           wsClient.send(JSON.stringify({
             type: 'chatMessage',
             messageId: msg._id || msg.id,
             chatroomId: msg.chatroomId,
             senderAid: msg.senderAid || msg.senderId, // Support both for transition
-            senderUsername: msg.senderUsername,
+            senderUsername: msg.senderUsername || (chatroom.participants.find(p => p.userAid === msg.senderAid)?.username || 'Anonymous'),
             content: msg.content,
             signature: msg.signature,
             timestamp: new Date(msg.timestamp).toISOString(),
