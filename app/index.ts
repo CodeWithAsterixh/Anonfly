@@ -439,6 +439,8 @@ wss.on('connection', (ws: WebSocket) => {
             content: msg.content,
             signature: msg.signature,
             timestamp: new Date(msg.timestamp).toISOString(),
+            isEdited: msg.isEdited || false,
+            isDeleted: msg.isDeleted || false,
             reactions: msg.reactions || [],
             replyTo: msg.replyTo ? {
               messageId: msg.replyTo.messageId.toString(),
@@ -556,12 +558,15 @@ wss.on('connection', (ws: WebSocket) => {
       await chatroom.save();
 
       addMessageToCache(chatroomId, {
+        _id: newMessage._id,
         chatroomId: new mongoose.Types.ObjectId(chatroomId),
         senderAid: newMessage.senderAid,
         senderUsername: newMessage.senderUsername,
         content: newMessage.content,
         signature,
         timestamp: newMessage.timestamp,
+        isEdited: false,
+        isDeleted: false,
         reactions: [],
         replyTo: newMessage.replyTo
       } as any);
@@ -577,6 +582,8 @@ wss.on('connection', (ws: WebSocket) => {
           content,
           signature,
           timestamp: newMessage.timestamp.toISOString(),
+          isEdited: false,
+          isDeleted: false,
           reactions: [],
           replyTo: newMessage.replyTo ? {
             messageId: newMessage.replyTo.messageId,
