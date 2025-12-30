@@ -463,6 +463,29 @@ wss.on('connection', (ws: WebSocket) => {
       return;
     }
 
+    // Handle typing status
+    if (parsedMessage.type === 'typing' && parsedMessage.chatroomId) {
+      const { chatroomId, isTyping } = parsedMessage;
+      const chatroomClients = activeChatrooms.get(chatroomId);
+      
+      if (chatroomClients && wsClient.userAid) {
+        const typingUpdate = JSON.stringify({
+          type: 'userTyping',
+          chatroomId,
+          userAid: wsClient.userAid,
+          username: wsClient.username,
+          isTyping
+        });
+
+        chatroomClients.forEach(client => {
+          if (client.id !== wsClient.id && client.readyState === WebSocket.OPEN) {
+            client.send(typingUpdate);
+          }
+        });
+      }
+      return;
+    }
+
     // Handle saving room key (allow first set)
     if (parsedMessage.type === 'saveRoomKey' && parsedMessage.chatroomId && parsedMessage.encryptedKey) {
       const chatroom = await ChatRoom.findById(parsedMessage.chatroomId);
