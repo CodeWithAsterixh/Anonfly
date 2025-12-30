@@ -8,6 +8,11 @@ export interface IMessage extends Document {
   content: string; // This will now be an encrypted blob
   signature?: string; // Signature of the encrypted blob
   timestamp: Date;
+  replyTo?: {
+    messageId: string;
+    senderUsername: string;
+    content: string;
+  };
 }
 
 const MessageSchema: Schema = new Schema({
@@ -17,6 +22,11 @@ const MessageSchema: Schema = new Schema({
   content: { type: String, required: true },
   signature: { type: String },
   timestamp: { type: Date, default: Date.now },
+  replyTo: {
+    messageId: { type: String },
+    senderUsername: { type: String },
+    content: { type: String }
+  }
 });
 
 const messageConn = getDbConnection();

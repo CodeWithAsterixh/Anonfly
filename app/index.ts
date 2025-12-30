@@ -439,6 +439,11 @@ wss.on('connection', (ws: WebSocket) => {
             content: msg.content,
             signature: msg.signature,
             timestamp: new Date(msg.timestamp).toISOString(),
+            replyTo: msg.replyTo ? {
+              messageId: msg.replyTo.messageId.toString(),
+              senderUsername: msg.replyTo.username,
+              content: msg.replyTo.content
+            } : undefined
           }));
         }
       } catch (err) {
@@ -503,7 +508,7 @@ wss.on('connection', (ws: WebSocket) => {
         return;
       }
 
-      const { chatroomId, content, signature } = parsedMessage;
+      const { chatroomId, content, signature, replyTo } = parsedMessage;
       if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
         logger.warn(`Invalid chatroomId received from ${wsClient.id}: ${chatroomId}`);
         wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid chatroom ID' }));
@@ -533,9 +538,16 @@ wss.on('connection', (ws: WebSocket) => {
       const newMessage: IMessage = {
         _id: new mongoose.Types.ObjectId(),
         senderAid: wsClient.userAid,
+        senderUsername: wsClient.username || 'Anonymous',
         content,
         signature,
         timestamp: new Date(),
+        replyTo: replyTo ? {
+          messageId: new mongoose.Types.ObjectId(replyTo.messageId),
+          userAid: replyTo.userAid || '', // We should probably include userAid in the reply data from client
+          username: replyTo.senderUsername || replyTo.username,
+          content: replyTo.content
+        } : undefined
       };
 
       chatroom.messages.push(newMessage);
@@ -544,10 +556,11 @@ wss.on('connection', (ws: WebSocket) => {
       addMessageToCache(chatroomId, {
         chatroomId: new mongoose.Types.ObjectId(chatroomId),
         senderAid: newMessage.senderAid,
-        senderUsername: wsClient.username || 'Anonymous',
+        senderUsername: newMessage.senderUsername,
         content: newMessage.content,
         signature,
         timestamp: newMessage.timestamp,
+        replyTo: newMessage.replyTo
       } as any);
 
       const chatroomClients = activeChatrooms.get(chatroomId);
@@ -561,6 +574,11 @@ wss.on('connection', (ws: WebSocket) => {
           content,
           signature,
           timestamp: newMessage.timestamp.toISOString(),
+          replyTo: newMessage.replyTo ? {
+            messageId: newMessage.replyTo.messageId.toHexString(),
+            senderUsername: newMessage.replyTo.username,
+            content: newMessage.replyTo.content
+          } : undefined
         });
         chatroomClients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {

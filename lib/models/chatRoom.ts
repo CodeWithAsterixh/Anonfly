@@ -5,11 +5,13 @@ const ReplyToSchema = new Schema({
   messageId: { type: Types.ObjectId, required: true },
   userAid: { type: String, required: true },
   username: { type: String, required: true },
+  content: { type: String, required: true }, // Store content for quick preview without extra lookups
 }, { _id: false });
 
 export interface IMessage {
   _id: Types.ObjectId; // Add _id for embedded documents
   senderAid: string;
+  senderUsername?: string; // Add username for easier rendering
   content: string;
   signature?: string; // Add signature for verification
   timestamp: Date;
@@ -18,6 +20,7 @@ export interface IMessage {
     messageId: Types.ObjectId;
     userAid: string;
     username: string;
+    content: string;
   };
 }
 
@@ -60,6 +63,7 @@ const ChatRoomSchema = new Schema<IChatRoom>({
   participants: [ParticipantSchema],
   messages: [new Schema({
     senderAid: { type: String, required: true },
+    senderUsername: { type: String }, // Add username to schema
     content: { type: String, required: true },
     signature: { type: String },
     timestamp: { type: Date, default: Date.now, index: true },
