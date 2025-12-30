@@ -24,6 +24,7 @@ export interface IMessage {
   signature?: string; // Add signature for verification
   timestamp: Date;
   isEdited?: boolean;
+  isDeleted?: boolean; // Add isDeleted for soft deletion
   replies?: Types.ObjectId[];
   reactions?: {
     userAid: string;
@@ -84,6 +85,7 @@ const ChatRoomSchema = new Schema<IChatRoom>({
     signature: { type: String },
     timestamp: { type: Date, default: Date.now, index: true },
     isEdited: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false }, // Add isDeleted to schema
     replies: [{ type: Types.ObjectId }], // Array of message IDs that are replies to this message
     reactions: [ReactionSchema], // Array of reactions to this message
     replyTo: ReplyToSchema, // Object containing details of the message this is a reply to

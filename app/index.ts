@@ -18,7 +18,7 @@ import env from "../lib/constants/env";
 import useRouter from "../lib/middlewares/routeHandler";
 import helmetMiddleware from "../lib/middlewares/securityHeaders";
 import withErrorHandling from "../lib/middlewares/withErrorHandling";
-import { addMessageToCache, getCachedMessages, cacheMessages } from '../lib/helpers/messageCache';
+import { addMessageToCache, getCachedMessages, cacheMessages, updateMessageInCache, removeMessageFromCache } from '../lib/helpers/messageCache';
 import cleanupChatroom from '../lib/helpers/cleanupChatroom';
 import ChatRoom, { type IMessage } from '../lib/models/chatRoom';
 import { verifySignature } from '../lib/helpers/crypto';
@@ -624,6 +624,7 @@ wss.on('connection', (ws: WebSocket) => {
               message.reactions.push({ userAid, username, emojiId, emojiValue, emojiType });
             }
             
+            chatroom.markModified('messages');
             await chatroom.save();
             
             // Update cache
@@ -667,8 +668,9 @@ wss.on('connection', (ws: WebSocket) => {
       try {
         const chatroom = await ChatRoom.findById(chatroomId);
         if (chatroom && mongoose.Types.ObjectId.isValid(messageId)) {
-          const message = chatroom.messages.find(m => (m._id || (m as any).id).toString() === messageId);
-          if (message) {
+          const messageIndex = chatroom.messages.findIndex(m => (m._id || (m as any).id).toString() === messageId);
+          if (messageIndex > -1) {
+            const message = chatroom.messages[messageIndex];
             // Only allow sender to edit
             if (message.senderAid !== wsClient.userAid) {
               wsClient.send(JSON.stringify({ type: 'error', message: 'Unauthorized to edit this message' }));
@@ -682,17 +684,36 @@ wss.on('connection', (ws: WebSocket) => {
               return;
             }
 
-            message.content = newContent;
-            message.isEdited = true;
+            chatroom.messages[messageIndex].content = newContent;
+            chatroom.messages[messageIndex].isEdited = true;
+
+            // Update replies to this message in DB
+            for (let i = 0; i < chatroom.messages.length; i++) {
+              if (chatroom.messages[i].replyTo && chatroom.messages[i].replyTo!.messageId === messageId) {
+                chatroom.messages[i].replyTo!.content = newContent;
+              }
+            }
+
+            chatroom.markModified('messages');
             await chatroom.save();
 
             // Update cache
-            const cachedMessages = await getCachedMessages(chatroomId);
-            const cachedMsg = cachedMessages.find(m => (m._id || m.id || "").toString() === messageId);
-            if (cachedMsg) {
-              cachedMsg.content = newContent;
-              (cachedMsg as any).isEdited = true;
-              await cacheMessages(chatroomId, cachedMessages);
+            await updateMessageInCache(chatroomId, {
+              id: messageId,
+              content: newContent,
+              isEdited: true
+            });
+            
+            // Also update cache for any messages that were replies to this message
+            const repliesToUpdate = chatroom.messages.filter(msg => msg.replyTo && msg.replyTo.messageId === messageId);
+            for (const reply of repliesToUpdate) {
+              await updateMessageInCache(chatroomId, {
+                id: reply._id.toString(),
+                replyTo: {
+                  ...reply.replyTo,
+                  content: newContent
+                }
+              });
             }
 
             // Broadcast edit
@@ -738,20 +759,49 @@ wss.on('connection', (ws: WebSocket) => {
               return;
             }
 
-            chatroom.messages.splice(messageIndex, 1);
+            // Soft delete: update message content and mark as deleted
+            chatroom.messages[messageIndex].isDeleted = true;
+            chatroom.messages[messageIndex].content = "[This message was deleted]";
+            chatroom.messages[messageIndex].signature = undefined;
+
+            // Update replies to this message in DB
+            for (let i = 0; i < chatroom.messages.length; i++) {
+              if (chatroom.messages[i].replyTo && chatroom.messages[i].replyTo!.messageId === messageId) {
+                chatroom.messages[i].replyTo!.content = "[This message was deleted]";
+              }
+            }
+
+            chatroom.markModified('messages');
             await chatroom.save();
 
             // Update cache
-            const cachedMessages = await getCachedMessages(chatroomId);
-            const newCachedMessages = cachedMessages.filter(m => (m._id || m.id || "").toString() !== messageId);
-            await cacheMessages(chatroomId, newCachedMessages);
+            await updateMessageInCache(chatroomId, {
+              id: messageId,
+              content: "[This message was deleted]",
+              isDeleted: true,
+              signature: undefined
+            });
+
+            // Also update cache for any messages that were replies to this message
+            const repliesToUpdate = chatroom.messages.filter(msg => msg.replyTo && msg.replyTo.messageId === messageId);
+            for (const reply of repliesToUpdate) {
+              await updateMessageInCache(chatroomId, {
+                id: reply._id.toString(),
+                replyTo: {
+                  ...reply.replyTo,
+                  content: "[This message was deleted]"
+                }
+              });
+            }
 
             // Broadcast deletion
             const chatroomClients = activeChatrooms.get(chatroomId);
             if (chatroomClients) {
               const deleteBroadcast = JSON.stringify({
                 type: 'messageDeleted',
-                messageId
+                messageId,
+                isDeleted: true,
+                content: "[This message was deleted]"
               });
               chatroomClients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {

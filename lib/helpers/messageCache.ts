@@ -174,4 +174,68 @@ export async function clearCachedMessages(chatroomId: string): Promise<void> {
   }
 }
 
+export async function updateMessageInCache(chatroomId: string, updatedMessage: any): Promise<void> {
+  try {
+    const key = `${CHATROOM_MESSAGES_PREFIX}${chatroomId}`;
+    const messageId = updatedMessage.id || (updatedMessage._id ? updatedMessage._id.toString() : null);
+
+    if (!messageId) {
+      logger.error('Cannot update message in cache: No ID provided');
+      return;
+    }
+
+    // Update LRU
+    const currentLRU = messageLRU.get(key) || [];
+    const lruIndex = currentLRU.findIndex(msg => (msg.id || (msg._id ? msg._id.toString() : null)) === messageId);
+    if (lruIndex !== -1) {
+      currentLRU[lruIndex] = { ...currentLRU[lruIndex], ...updatedMessage };
+      messageLRU.set(key, currentLRU);
+    }
+
+    // Update Redis - since it's a list, we need to fetch, update, and re-set
+    // This is not the most efficient but matches the current list-based architecture
+    const serializedMessages = await redisClient.lrange(key, 0, -1);
+    const messages = serializedMessages.map((msgStr: string) => JSON.parse(msgStr));
+    
+    const redisIndex = messages.findIndex((msg: any) => (msg.id || (msg._id ? msg._id.toString() : null)) === messageId);
+    if (redisIndex !== -1) {
+      messages[redisIndex] = { ...messages[redisIndex], ...updatedMessage };
+      
+      // Re-cache the entire list to maintain order and structure
+      await cacheMessages(chatroomId, messages);
+    }
+
+    logger.debug(`Updated message ${messageId} in cache for chatroom ${chatroomId}`);
+  } catch (error) {
+    logger.error(`Error updating message in cache for chatroom ${chatroomId}: ${error}`);
+  }
+}
+
+export async function removeMessageFromCache(chatroomId: string, messageId: string): Promise<void> {
+  try {
+    const key = `${CHATROOM_MESSAGES_PREFIX}${chatroomId}`;
+
+    // Update LRU
+    const currentLRU = messageLRU.get(key) || [];
+    const filteredLRU = currentLRU.filter(msg => (msg.id || (msg._id ? msg._id.toString() : null)) !== messageId);
+    if (filteredLRU.length !== currentLRU.length) {
+      messageLRU.set(key, filteredLRU);
+    }
+
+    // Update Redis
+    const serializedMessages = await redisClient.lrange(key, 0, -1);
+    const messages = serializedMessages.map((msgStr: string) => JSON.parse(msgStr));
+    
+    const filteredMessages = messages.filter((msg: any) => (msg.id || (msg._id ? msg._id.toString() : null)) !== messageId);
+    
+    if (filteredMessages.length !== messages.length) {
+      await cacheMessages(chatroomId, filteredMessages);
+    }
+
+    logger.debug(`Removed message ${messageId} from cache for chatroom ${chatroomId}`);
+  } catch (error) {
+    logger.error(`Error removing message from cache for chatroom ${chatroomId}: ${error}`);
+  }
+}
+
 export default redisClient;
