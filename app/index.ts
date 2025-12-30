@@ -439,6 +439,7 @@ wss.on('connection', (ws: WebSocket) => {
             content: msg.content,
             signature: msg.signature,
             timestamp: new Date(msg.timestamp).toISOString(),
+            reactions: msg.reactions || [],
             replyTo: msg.replyTo ? {
               messageId: msg.replyTo.messageId.toString(),
               senderUsername: msg.replyTo.username,
@@ -561,6 +562,7 @@ wss.on('connection', (ws: WebSocket) => {
         content: newMessage.content,
         signature,
         timestamp: newMessage.timestamp,
+        reactions: [],
         replyTo: newMessage.replyTo
       } as any);
 
@@ -568,13 +570,14 @@ wss.on('connection', (ws: WebSocket) => {
       if (chatroomClients) {
         const messageToBroadcast = JSON.stringify({
           type: 'chatMessage',
-          messageId: newMessage._id,
+          messageId: newMessage._id.toString(),
           chatroomId,
           senderAid: wsClient.userAid,
           senderUsername: wsClient.username || 'Anonymous',
           content,
           signature,
           timestamp: newMessage.timestamp.toISOString(),
+          reactions: [],
           replyTo: newMessage.replyTo ? {
             messageId: newMessage.replyTo.messageId,
             userAid: newMessage.replyTo.userAid,
@@ -591,6 +594,175 @@ wss.on('connection', (ws: WebSocket) => {
             client.send(messageToBroadcast);
           }
         });
+      }
+      return;
+    }
+
+    // Handle message reactions
+    if (parsedMessage.type === 'reaction' && parsedMessage.chatroomId && parsedMessage.messageId) {
+      if (!wsClient.userAid || !wsClient.chatroomId) {
+        logger.warn(`Reaction received from unauthenticated or unjoined client: ${wsClient.id}`);
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Not authenticated or not in a chatroom' }));
+        return;
+      }
+
+      const { chatroomId, messageId, emojiId, emojiValue, emojiType, userAid, username } = parsedMessage;
+      
+      try {
+        const chatroom = await ChatRoom.findById(chatroomId);
+        if (chatroom && mongoose.Types.ObjectId.isValid(messageId)) {
+          // Use find instead of id() to avoid potential TypeScript/Mongoose subdocument array typing issues
+          const message = chatroom.messages.find(m => (m._id || (m as any).id).toString() === messageId);
+          if (message) {
+            if (!message.reactions) message.reactions = [];
+            
+            // Toggle reaction: if user already reacted with this emoji, remove it
+            const existingIndex = message.reactions.findIndex(r => r.userAid === userAid && r.emojiId === emojiId);
+            if (existingIndex > -1) {
+              message.reactions.splice(existingIndex, 1);
+            } else {
+              message.reactions.push({ userAid, username, emojiId, emojiValue, emojiType });
+            }
+            
+            await chatroom.save();
+            
+            // Update cache
+            const cachedMessages = await getCachedMessages(chatroomId);
+            const cachedMsg = cachedMessages.find(m => (m._id || m.id || "").toString() === messageId);
+            if (cachedMsg) {
+              cachedMsg.reactions = message.reactions;
+              await cacheMessages(chatroomId, cachedMessages);
+            }
+
+            // Broadcast reaction update
+            const chatroomClients = activeChatrooms.get(chatroomId);
+            if (chatroomClients) {
+              const reactionBroadcast = JSON.stringify({
+                type: 'reactionUpdate',
+                messageId,
+                reactions: message.reactions
+              });
+              chatroomClients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                  client.send(reactionBroadcast);
+                }
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.error(`Error handling reaction: ${err}`);
+      }
+      return;
+    }
+
+    // Handle message editing
+    if (parsedMessage.type === 'editMessage' && parsedMessage.chatroomId && parsedMessage.messageId && parsedMessage.newContent) {
+      if (!wsClient.userAid || !wsClient.chatroomId) {
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Not authenticated or not in a chatroom' }));
+        return;
+      }
+
+      const { chatroomId, messageId, newContent } = parsedMessage;
+      try {
+        const chatroom = await ChatRoom.findById(chatroomId);
+        if (chatroom && mongoose.Types.ObjectId.isValid(messageId)) {
+          const message = chatroom.messages.find(m => (m._id || (m as any).id).toString() === messageId);
+          if (message) {
+            // Only allow sender to edit
+            if (message.senderAid !== wsClient.userAid) {
+              wsClient.send(JSON.stringify({ type: 'error', message: 'Unauthorized to edit this message' }));
+              return;
+            }
+
+            // 10-minute check on server-side too
+            const messageTime = new Date(message.timestamp).getTime();
+            if (Date.now() - messageTime > 10 * 60 * 1000) {
+              wsClient.send(JSON.stringify({ type: 'error', message: 'Edit window expired' }));
+              return;
+            }
+
+            message.content = newContent;
+            message.isEdited = true;
+            await chatroom.save();
+
+            // Update cache
+            const cachedMessages = await getCachedMessages(chatroomId);
+            const cachedMsg = cachedMessages.find(m => (m._id || m.id || "").toString() === messageId);
+            if (cachedMsg) {
+              cachedMsg.content = newContent;
+              (cachedMsg as any).isEdited = true;
+              await cacheMessages(chatroomId, cachedMessages);
+            }
+
+            // Broadcast edit
+            const chatroomClients = activeChatrooms.get(chatroomId);
+            if (chatroomClients) {
+              const editBroadcast = JSON.stringify({
+                type: 'messageEdited',
+                messageId,
+                newContent,
+                isEdited: true
+              });
+              chatroomClients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                  client.send(editBroadcast);
+                }
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.error(`Error handling edit: ${err}`);
+      }
+      return;
+    }
+
+    // Handle message deletion
+    if (parsedMessage.type === 'deleteMessage' && parsedMessage.chatroomId && parsedMessage.messageId) {
+      if (!wsClient.userAid || !wsClient.chatroomId) {
+        wsClient.send(JSON.stringify({ type: 'error', message: 'Not authenticated or not in a chatroom' }));
+        return;
+      }
+
+      const { chatroomId, messageId } = parsedMessage;
+      try {
+        const chatroom = await ChatRoom.findById(chatroomId);
+        if (chatroom && mongoose.Types.ObjectId.isValid(messageId)) {
+          const messageIndex = chatroom.messages.findIndex(m => (m._id || (m as any).id).toString() === messageId);
+          if (messageIndex > -1) {
+            const message = chatroom.messages[messageIndex];
+            // Only allow sender to delete
+            if (message.senderAid !== wsClient.userAid) {
+              wsClient.send(JSON.stringify({ type: 'error', message: 'Unauthorized to delete this message' }));
+              return;
+            }
+
+            chatroom.messages.splice(messageIndex, 1);
+            await chatroom.save();
+
+            // Update cache
+            const cachedMessages = await getCachedMessages(chatroomId);
+            const newCachedMessages = cachedMessages.filter(m => (m._id || m.id || "").toString() !== messageId);
+            await cacheMessages(chatroomId, newCachedMessages);
+
+            // Broadcast deletion
+            const chatroomClients = activeChatrooms.get(chatroomId);
+            if (chatroomClients) {
+              const deleteBroadcast = JSON.stringify({
+                type: 'messageDeleted',
+                messageId
+              });
+              chatroomClients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                  client.send(deleteBroadcast);
+                }
+              });
+            }
+          }
+        }
+      } catch (err) {
+        logger.error(`Error handling deletion: ${err}`);
       }
       return;
     }

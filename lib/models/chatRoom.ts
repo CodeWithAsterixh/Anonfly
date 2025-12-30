@@ -1,6 +1,14 @@
 import { Schema, model, Types, Document } from "mongoose";
 import getDbConnection from "../handlers/getDbConnection";
 
+const ReactionSchema = new Schema({
+  userAid: { type: String, required: true },
+  username: { type: String, required: true },
+  emojiId: { type: String, required: true },
+  emojiValue: { type: String, required: true },
+  emojiType: { type: String, default: 'unicode' },
+}, { _id: false });
+
 const ReplyToSchema = new Schema({
   messageId: { type: String, required: true },
   userAid: { type: String, required: true },
@@ -15,7 +23,15 @@ export interface IMessage {
   content: string;
   signature?: string; // Add signature for verification
   timestamp: Date;
+  isEdited?: boolean;
   replies?: Types.ObjectId[];
+  reactions?: {
+    userAid: string;
+    username: string;
+    emojiId: string;
+    emojiValue: string;
+    emojiType: string;
+  }[];
   replyTo?: {
     messageId: string;
     userAid: string;
@@ -67,7 +83,9 @@ const ChatRoomSchema = new Schema<IChatRoom>({
     content: { type: String, required: true },
     signature: { type: String },
     timestamp: { type: Date, default: Date.now, index: true },
+    isEdited: { type: Boolean, default: false },
     replies: [{ type: Types.ObjectId }], // Array of message IDs that are replies to this message
+    reactions: [ReactionSchema], // Array of reactions to this message
     replyTo: ReplyToSchema, // Object containing details of the message this is a reply to
   })],
 });
