@@ -442,7 +442,8 @@ wss.on('connection', (ws: WebSocket) => {
             replyTo: msg.replyTo ? {
               messageId: msg.replyTo.messageId.toString(),
               senderUsername: msg.replyTo.username,
-              content: msg.replyTo.content
+              content: msg.replyTo.content,
+              userAid: msg.replyTo.userAid
             } : undefined
           }));
         }
@@ -543,8 +544,8 @@ wss.on('connection', (ws: WebSocket) => {
         signature,
         timestamp: new Date(),
         replyTo: replyTo ? {
-          messageId: new mongoose.Types.ObjectId(replyTo.messageId),
-          userAid: replyTo.userAid || '', // We should probably include userAid in the reply data from client
+          messageId: replyTo.messageId,
+          userAid: replyTo.userAid || '',
           username: replyTo.senderUsername || replyTo.username,
           content: replyTo.content
         } : undefined
@@ -575,7 +576,8 @@ wss.on('connection', (ws: WebSocket) => {
           signature,
           timestamp: newMessage.timestamp.toISOString(),
           replyTo: newMessage.replyTo ? {
-            messageId: newMessage.replyTo.messageId.toHexString(),
+            messageId: newMessage.replyTo.messageId,
+            userAid: newMessage.replyTo.userAid,
             senderUsername: newMessage.replyTo.username,
             content: newMessage.replyTo.content
           } : undefined

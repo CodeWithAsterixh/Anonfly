@@ -2,7 +2,7 @@ import { Schema, model, Types, Document } from "mongoose";
 import getDbConnection from "../handlers/getDbConnection";
 
 const ReplyToSchema = new Schema({
-  messageId: { type: Types.ObjectId, required: true },
+  messageId: { type: String, required: true },
   userAid: { type: String, required: true },
   username: { type: String, required: true },
   content: { type: String, required: true }, // Store content for quick preview without extra lookups
@@ -17,7 +17,7 @@ export interface IMessage {
   timestamp: Date;
   replies?: Types.ObjectId[];
   replyTo?: {
-    messageId: Types.ObjectId;
+    messageId: string;
     userAid: string;
     username: string;
     content: string;
