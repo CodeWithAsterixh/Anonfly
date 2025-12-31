@@ -43,7 +43,8 @@ export const sessionStore = {
     }
   },
   set: async (token: string, session: SessionData): Promise<void> => {
-    await redisClient.set(`session:${token}`, JSON.stringify(session), 'EX', 60 * 60 * 24);
+    // Session expires in 1 week (60 * 60 * 24 * 7 seconds)
+    await redisClient.set(`session:${token}`, JSON.stringify(session), 'EX', 60 * 60 * 24 * 7);
   },
   delete: async (token: string): Promise<void> => {
     await redisClient.del(`session:${token}`);
