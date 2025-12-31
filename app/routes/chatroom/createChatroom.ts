@@ -11,10 +11,11 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   middleware: [verifyToken],
   handler: withErrorHandling(async (event) => {
     const { body, req } = event;
-    const { roomname, description, password } = body as { 
+    const { roomname, description, password, region } = body as { 
       roomname: string; 
       description?: string; 
       password?: string;
+      region?: string;
     };
 
     if (!roomname) {
@@ -51,6 +52,7 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
       const newChatRoom = new ChatRoom({
         roomname,
         description,
+        region,
         hostAid,
         password: hashedPassword,
         isLocked,

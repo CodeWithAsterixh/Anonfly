@@ -60,6 +60,7 @@ const ParticipantSchema = new Schema<IParticipant>({
 export interface IChatRoom extends Document {
   roomname: string;
   description?: string;
+  region?: string; // Add region for location-based sorting
   hostAid: string;
   participants: IParticipant[];
   messages: IMessage[];
@@ -72,6 +73,7 @@ export interface IChatRoom extends Document {
 const ChatRoomSchema = new Schema<IChatRoom>({
   roomname: { type: String, required: true, unique: true },
   description: { type: String, default: "" },
+  region: { type: String }, // Optional region field
   hostAid: { type: String, required: true },
   encryptedRoomKey: { type: String },
   roomKeyIv: { type: String },

@@ -10,7 +10,7 @@ const router = Router();
 /**
  * Fetches the list of chatrooms and formats them for the client.
  */
-async function getFormattedChatroomList(userAid: string) {
+async function getFormattedChatroomList(userAid: string, userRegion?: string) {
   // Try to get raw list from cache
   let chatrooms = await getCachedChatroomList();
 
@@ -28,6 +28,7 @@ async function getFormattedChatroomList(userAid: string) {
           _id: 1,
           roomname: 1,
           description: 1,
+          region: 1,
           hostAid: 1,
           participants: 1,
           isLocked: 1,
@@ -40,7 +41,7 @@ async function getFormattedChatroomList(userAid: string) {
     await cacheChatroomList(chatrooms);
   }
 
-  return chatrooms.map(room => {
+  const formattedRooms = chatrooms.map(room => {
     const lastMessageContent = room.lastMessage || null;
     const isParticipant = room.participants.some((p: IParticipant) => p.userAid === userAid);
 
@@ -48,12 +49,24 @@ async function getFormattedChatroomList(userAid: string) {
       id: room._id,
       roomname: room.roomname,
       description: room.description,
+      region: room.region,
       hostAid: room.hostAid,
       participantCount: room.participants.length,
       isLocked: room.isLocked || false,
       lastMessage: isParticipant ? lastMessageContent : null,
     };
   });
+
+  // Sort: prioritize rooms in the same region
+  if (userRegion) {
+    formattedRooms.sort((a, b) => {
+      if (a.region === userRegion && b.region !== userRegion) return -1;
+      if (a.region !== userRegion && b.region === userRegion) return 1;
+      return 0;
+    });
+  }
+
+  return formattedRooms;
 }
 
 router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
@@ -64,10 +77,11 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
   res.flushHeaders();
 
   const userAid = (req as any).userAid;
+  const userRegion = req.query.region as string;
 
   // Initial send
   try {
-    const chatroomList = await getFormattedChatroomList(userAid);
+    const chatroomList = await getFormattedChatroomList(userAid, userRegion);
     res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
   } catch (error) {
     // Silently fail initial send
@@ -79,7 +93,7 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
       if (res.writableEnded) return;
       // Invalidate cache before fetching new list
       await invalidateChatroomList();
-      const chatroomList = await getFormattedChatroomList(userAid);
+      const chatroomList = await getFormattedChatroomList(userAid, userRegion);
       res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
     } catch (error) {
       // Silently fail update
