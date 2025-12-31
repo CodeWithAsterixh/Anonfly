@@ -33,9 +33,11 @@ import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
 import editChatroomRoute from "./routes/chatroom/editChatroom";
 import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
 import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
+import removeParticipantRoute from "./routes/chatroom/removeParticipant";
 import chatroomSSERoute from "./routes/chatroom/chatroomSSE";
 import challengeRoute from "./routes/auth/challenge";
 import verifyRoute from "./routes/auth/verify";
+import getMyModerationTokenRoute from "./routes/auth/getModerationToken";
 
 import homeRoute from "./routes/homeRoute";
 import healthzRoute from "./routes/healthzRoute";
@@ -110,6 +112,7 @@ router(deleteMessageRoute); // Use the new route
 
 router(challengeRoute);
 router(verifyRoute);
+router(getMyModerationTokenRoute);
 
 router(joinChatroomRoute);
 
@@ -119,6 +122,7 @@ router(deleteChatroomRoute);
 router(editChatroomRoute);
 
 router(leaveChatroomRoute);
+router(removeParticipantRoute);
 
 // Start the server
 const server = app.listen(PORT, () => {

@@ -4,6 +4,7 @@ import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 import bcrypt from 'bcrypt';
+import { getPermissionsByUserId } from '../../../lib/helpers/permissionHelper';
 
 const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
@@ -41,6 +42,9 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     try {
+      // Ensure host has permission record
+      await getPermissionsByUserId(hostAid);
+
       let hashedPassword;
       let isLocked = false;
 

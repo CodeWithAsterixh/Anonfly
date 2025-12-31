@@ -2,6 +2,7 @@ import { Router } from 'express';
 import ChatRoom from '../../../lib/models/chatRoom';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
+import { getPermissionsByUserId } from '../../../lib/helpers/permissionHelper';
 
 const router = Router();
 
@@ -10,6 +11,7 @@ const router = Router();
  */
 router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) => {
   const { chatroomId } = req.params;
+  const userAid = (req as any)?.userAid;
 
   // Set SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -30,6 +32,14 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
         return;
       }
 
+      let allowedFeatures: string[] = [];
+      if (userAid === chatroom.hostAid) {
+        const permission = await getPermissionsByUserId(userAid);
+        if (permission) {
+          allowedFeatures = permission.allowedFeatures;
+        }
+      }
+
       const details = {
         roomId: chatroom._id,
         roomname: chatroom.roomname,
@@ -37,6 +47,7 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
         hostAid: chatroom.hostAid,
         isLocked: chatroom.isLocked || false,
         participantCount: chatroom.participants.length,
+        allowedFeatures,
       };
 
       res.write(`data: ${JSON.stringify(details)}\n\n`);

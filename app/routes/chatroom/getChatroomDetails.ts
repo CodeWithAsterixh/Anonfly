@@ -2,6 +2,7 @@ import withErrorHandling from "../../../lib/middlewares/withErrorHandling";
 import ChatRoom from "../../../lib/models/chatRoom";
 import type { RouteConfig, RouteEvent } from '../../../types/index.d';
 import { verifyToken } from "../../../lib/middlewares/verifyToken";
+import { getPermissionsByUserId } from "../../../lib/helpers/permissionHelper";
 
 const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
   method: "get",
@@ -9,6 +10,7 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
   middleware: [verifyToken],
   handler: withErrorHandling(async (event: RouteEvent) => {
     const { chatroomId } = event.req.params;
+    const userAid = (event.req as any)?.userAid;
 
     const chatroom = await ChatRoom.findById(chatroomId).select(
       "roomname description hostAid participants isLocked"
@@ -23,6 +25,14 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
       };
     }
 
+    let allowedFeatures: string[] = [];
+    if (userAid === chatroom.hostAid) {
+      const permission = await getPermissionsByUserId(userAid);
+      if (permission) {
+        allowedFeatures = permission.allowedFeatures;
+      }
+    }
+
     return {
       message: "Chatroom details fetched successfully",
       statusCode: 200,
@@ -35,6 +45,7 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
         hostAid: chatroom.hostAid,
         isLocked: chatroom.isLocked || false,
         participantCount: chatroom.participants.length,
+        allowedFeatures, // Only populated for the host
         participants: chatroom.participants.map((p) => ({
           userAid: p.userAid,
           username: p.username,
