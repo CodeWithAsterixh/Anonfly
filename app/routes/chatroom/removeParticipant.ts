@@ -12,24 +12,14 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
   path: '/chatrooms/:chatroomId/participants/:userAid',
   middleware: [verifyToken], // Basic token verification first
   handler: withErrorHandling(async (event) => {
-    const { req, params, body } = event;
+    const { req, params } = event;
     const { chatroomId, userAid: targetUserAid } = params;
     const requesterAid = (req as any)?.userAid;
-    const moderationToken = (body as any)?.token || req.headers['x-moderation-token'];
 
     if (!requesterAid) {
       return {
         message: 'User not authenticated',
         statusCode: 401,
-        success: false,
-        status: 'bad',
-      };
-    }
-
-    if (!moderationToken) {
-      return {
-        message: 'Moderation token is required',
-        statusCode: 400,
         success: false,
         status: 'bad',
       };
@@ -56,7 +46,7 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // 2. Perform the feature gating check and token verification
+    // 2. Perform the feature gating check
     const permission = await getPermissionsByUserId(requesterAid);
     
     if (!permission || !permission.allowedFeatures.includes(FEATURES.REMOVE_USER)) {
@@ -68,18 +58,10 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    if (permission.moderationToken !== moderationToken) {
+    // Check if permissions have expired (e.g., if we tie expiry to a plan subscription)
+    if (permission.tokenExpiresAt && new Date() > permission.tokenExpiresAt) {
       return {
-        message: 'Invalid moderation token.',
-        statusCode: 403,
-        success: false,
-        status: 'bad',
-      };
-    }
-
-    if (new Date() > permission.tokenExpiresAt) {
-      return {
-        message: 'Moderation token has expired.',
+        message: 'Your feature access has expired. Please renew your plan.',
         statusCode: 403,
         success: false,
         status: 'bad',
