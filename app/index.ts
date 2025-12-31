@@ -356,6 +356,8 @@ wss.on('connection', (ws: WebSocket) => {
         chatroom.participants.push({
           userAid: wsClient.userAid,
           username: wsClient.username,
+          publicKey: parsedMessage.publicKey,
+          exchangePublicKey: parsedMessage.exchangePublicKey,
           joinedAt: new Date()
         });
         // If no host, set as host
@@ -367,8 +369,8 @@ wss.on('connection', (ws: WebSocket) => {
         chatEventEmitter.emit('chatroomListUpdated');
       }
       
-      const publicKey = participant?.publicKey;
-      const exchangePublicKey = participant?.exchangePublicKey;
+      const publicKey = participant?.publicKey || parsedMessage.publicKey;
+      const exchangePublicKey = participant?.exchangePublicKey || parsedMessage.exchangePublicKey;
 
       wsClient.send(JSON.stringify({ 
         type: 'joinSuccess', 

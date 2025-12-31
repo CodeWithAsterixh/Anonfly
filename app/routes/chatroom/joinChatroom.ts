@@ -81,16 +81,10 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
       }
     }
 
-    chatroom.participants.push({ 
-      userAid, 
-      username, 
-      publicKey: (req as any).session?.publicKey,
-      exchangePublicKey: (req as any).session?.exchangePublicKey,
-      joinedAt: new Date() 
-    });
-    await chatroom.save();
-
-    // Emit event for real-time updates
+    // We no longer add participants here. They are added when they connect via WebSocket.
+    // This route now primarily serves for password verification and existence check.
+    
+    // Emit event for real-time updates (optional since no data changed, but good for consistency)
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
     chatEventEmitter.emit('chatroomListUpdated');
 

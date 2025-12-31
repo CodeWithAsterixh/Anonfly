@@ -54,12 +54,7 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
         hostAid,
         password: hashedPassword,
         isLocked,
-        participants: [{ 
-          userAid: hostAid, 
-          username,
-          publicKey: (req as any).session?.publicKey,
-          exchangePublicKey: (req as any).session?.exchangePublicKey
-        }], // Add host as participant
+        participants: [], // Don't add host as participant until they connect via WS
       });
 
       await newChatRoom.save();
