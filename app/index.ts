@@ -306,6 +306,11 @@ wss.on('connection', (ws: WebSocket) => {
 
   // Centralized parsed message handler that queues messages during initial sync
   async function handleParsedMessage(wsClient: CustomWebSocket, parsedMessage: any) {
+    if (parsedMessage.type === 'ping') {
+      wsClient.send(JSON.stringify({ type: 'pong' }));
+      return;
+    }
+
     // If syncing (server is sending cached messages), queue incoming chat messages
     if (wsClient.syncing) {
       if (!wsClient.messageQueue) wsClient.messageQueue = [];
