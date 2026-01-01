@@ -51,7 +51,7 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
       description: room.description,
       region: room.region,
       hostAid: room.hostAid,
-      participantCount: room.participants.length,
+      participantCount: room.participants.filter((p: IParticipant) => !p.leftAt).length,
       isLocked: room.isLocked || false,
       lastMessage: isParticipant ? lastMessageContent : null,
     };

@@ -78,10 +78,10 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // 4. Find and remove the participant
-    const participantIndex = chatroom.participants.findIndex(p => p.userAid === targetUserAid);
+    // 4. Find and mark the participant as left
+    const participant = chatroom.participants.find(p => p.userAid === targetUserAid);
 
-    if (participantIndex === -1) {
+    if (!participant) {
       return {
         message: 'Participant not found in this chatroom',
         statusCode: 404,
@@ -90,7 +90,7 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    chatroom.participants.splice(participantIndex, 1);
+    participant.leftAt = new Date();
     await chatroom.save();
 
     // Emit event for real-time updates

@@ -47,6 +47,7 @@ export interface IParticipant {
   publicKey?: string; // Identity Public Key
   exchangePublicKey?: string; // Exchange Public Key
   joinedAt?: Date;
+  leftAt?: Date; // Timestamp when user left the room
 }
 
 const ParticipantSchema = new Schema<IParticipant>({
@@ -55,6 +56,7 @@ const ParticipantSchema = new Schema<IParticipant>({
   publicKey: { type: String },
   exchangePublicKey: { type: String },
   joinedAt: { type: Date, default: Date.now },
+  leftAt: { type: Date },
 }, { _id: false });
 
 export interface IChatRoom extends Document {

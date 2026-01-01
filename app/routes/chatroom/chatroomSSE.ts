@@ -46,7 +46,7 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
         description: chatroom.description,
         hostAid: chatroom.hostAid,
         isLocked: chatroom.isLocked || false,
-        participantCount: chatroom.participants.length,
+        participantCount: chatroom.participants.filter(p => !p.leftAt).length,
         allowedFeatures,
       };
 

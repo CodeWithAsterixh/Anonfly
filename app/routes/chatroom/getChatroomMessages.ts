@@ -11,7 +11,7 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
     const { req, params } = event;
     const { chatroomId } = params as { chatroomId: string };
 
-    const chatroom = await ChatRoom.findById(chatroomId).select('messages').lean();
+    const chatroom = await ChatRoom.findById(chatroomId).select('messages hostAid participants').lean();
 
     if (!chatroom) {
       return {
@@ -22,11 +22,21 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
+    const userAid = (req as any).userAid;
+    const isHost = chatroom.hostAid === userAid;
+    const currentParticipant = chatroom.participants.find(p => p.userAid === userAid);
+    const joinedAt = currentParticipant?.joinedAt ? new Date(currentParticipant.joinedAt).getTime() : 0;
+
+    let messages = chatroom.messages;
+    if (!isHost && joinedAt > 0) {
+      messages = messages.filter(msg => new Date(msg.timestamp).getTime() >= joinedAt);
+    }
+
     return {
       statusCode: 200,
       success: true,
       status: 'good',
-      data: chatroom.messages,
+      data: messages,
     };
   }),
 };

@@ -43,9 +43,9 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    const participantIndex = chatroom.participants.findIndex(p => p.userAid === userAid);
+    const participant = chatroom.participants.find(p => p.userAid === userAid);
 
-    if (participantIndex === -1) {
+    if (!participant) {
       return {
         message: 'User is not a participant in this chatroom',
         statusCode: 404,
@@ -54,16 +54,17 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // Remove user from participants list
-    chatroom.participants.splice(participantIndex, 1);
+    // Mark user as left in participants list
+    participant.leftAt = new Date();
 
     // If the leaving user is the host, transfer host status if possible
     if (chatroom.hostAid === userAid) {
-      if (chatroom.participants.length > 0) {
+      const remainingParticipants = chatroom.participants.filter(p => !p.leftAt);
+      if (remainingParticipants.length > 0) {
         // Find participant with the closest timestamp to be the new host
-        const newHost = chatroom.participants.reduce((prev, curr) => {
+        const newHost = remainingParticipants.reduce((prev, curr) => {
           return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
-        }, chatroom.participants[0]);
+        }, remainingParticipants[0]);
         chatroom.hostAid = newHost.userAid;
       } else {
         // If no participants left, preserve the room for a while
