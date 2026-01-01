@@ -96,6 +96,9 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
     // Emit event for real-time updates
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
     chatEventEmitter.emit('chatroomListUpdated');
+    
+    // Emit specific event for the removed user to trigger disconnection
+    chatEventEmitter.emit(`userRemoved:${chatroomId}`, { chatroomId, userAid: targetUserAid });
 
     return {
       message: 'Participant removed successfully',

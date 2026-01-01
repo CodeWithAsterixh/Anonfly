@@ -63,9 +63,21 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
   const eventName = `chatroomUpdated:${chatroomId}`;
   chatEventEmitter.on(eventName, sendUpdate);
 
+  // Listen for user removal events
+  const removalEventName = `userRemoved:${chatroomId}`;
+  const handleUserRemoved = (data: { chatroomId: string, userAid: string }) => {
+    if (data.userAid === userAid) {
+      res.write(`event: removed\ndata: ${JSON.stringify({ message: 'You have been removed from the room' })}\n\n`);
+      // We don't call res.end() immediately to allow the client to receive the message
+      // The client should close the connection upon receiving this event
+    }
+  };
+  chatEventEmitter.on(removalEventName, handleUserRemoved);
+
   // Clean up when connection closes
   req.on('close', () => {
     chatEventEmitter.off(eventName, sendUpdate);
+    chatEventEmitter.off(removalEventName, handleUserRemoved);
     res.end();
   });
 });
