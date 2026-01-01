@@ -19,6 +19,8 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  console.log(`[SSE] Client connected: ${userAid} for room ${chatroomId}`);
+
   const sendUpdate = async () => {
     try {
       if (res.writableEnded) return;
@@ -50,35 +52,53 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
         allowedFeatures,
       };
 
-      res.write(`data: ${JSON.stringify(details)}\n\n`);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify(details)}\n\n`);
+      }
     } catch (error) {
-      // Silently fail update
+      console.error(`[SSE] Error sending update for room ${chatroomId}:`, error);
     }
   };
 
-  // Initial send
-  await sendUpdate();
+  // Heartbeat to keep connection alive and detect disconnects
+  const heartbeatInterval = setInterval(() => {
+    if (!res.writableEnded) {
+      res.write(': heartbeat\n\n');
+    }
+  }, 30000); // 30 seconds
+
+  let updateTimeout: NodeJS.Timeout | null = null;
+  const sendUpdateDebounced = () => {
+    if (updateTimeout) clearTimeout(updateTimeout);
+    updateTimeout = setTimeout(sendUpdate, 150); // 150ms debounce
+  };
 
   // Listen for chatroom update events for this specific room
   const eventName = `chatroomUpdated:${chatroomId}`;
-  chatEventEmitter.on(eventName, sendUpdate);
+  chatEventEmitter.on(eventName, sendUpdateDebounced);
 
   // Listen for user removal events
   const removalEventName = `userRemoved:${chatroomId}`;
   const handleUserRemoved = (data: { chatroomId: string, userAid: string }) => {
-    if (data.userAid === userAid) {
+    if (data.userAid === userAid && !res.writableEnded) {
       res.write(`event: removed\ndata: ${JSON.stringify({ message: 'You have been removed from the room' })}\n\n`);
-      // We don't call res.end() immediately to allow the client to receive the message
-      // The client should close the connection upon receiving this event
     }
   };
   chatEventEmitter.on(removalEventName, handleUserRemoved);
 
+  // Initial send
+  await sendUpdate();
+
   // Clean up when connection closes
   req.on('close', () => {
-    chatEventEmitter.off(eventName, sendUpdate);
+    console.log(`[SSE] Client disconnected: ${userAid} for room ${chatroomId}`);
+    clearInterval(heartbeatInterval);
+    if (updateTimeout) clearTimeout(updateTimeout);
+    chatEventEmitter.off(eventName, sendUpdateDebounced);
     chatEventEmitter.off(removalEventName, handleUserRemoved);
-    res.end();
+    if (!res.writableEnded) {
+      res.end();
+    }
   });
 });
 

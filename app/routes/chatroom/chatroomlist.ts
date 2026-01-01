@@ -79,12 +79,16 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
   const userAid = (req as any).userAid;
   const userRegion = req.query.region as string;
 
+  console.log(`[SSE] Client connected for chatroom list: ${userAid}`);
+
   // Initial send
   try {
     const chatroomList = await getFormattedChatroomList(userAid, userRegion);
-    res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
+    }
   } catch (error) {
-    // Silently fail initial send
+    console.error(`[SSE] Error sending initial chatroom list:`, error);
   }
 
   // Define the update handler
@@ -94,23 +98,43 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
       // Invalidate cache before fetching new list
       await invalidateChatroomList();
       const chatroomList = await getFormattedChatroomList(userAid, userRegion);
-      res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify(chatroomList)}\n\n`);
+      }
     } catch (error) {
-      // Silently fail update
+      console.error(`[SSE] Error sending chatroom list update:`, error);
     }
   };
 
+  let updateTimeout: NodeJS.Timeout | null = null;
+  const sendUpdateDebounced = () => {
+    if (updateTimeout) clearTimeout(updateTimeout);
+    updateTimeout = setTimeout(sendUpdate, 200); // 200ms debounce for list as it's heavier
+  };
+
+  // Heartbeat
+  const heartbeatInterval = setInterval(() => {
+    if (!res.writableEnded) {
+      res.write(': heartbeat\n\n');
+    }
+  }, 30000);
+
   // Listen for all relevant events that should update the list
-  chatEventEmitter.on('chatroomCreated', sendUpdate);
-  chatEventEmitter.on('chatroomDeleted', sendUpdate);
-  chatEventEmitter.on('chatroomListUpdated', sendUpdate);
+  chatEventEmitter.on('chatroomCreated', sendUpdateDebounced);
+  chatEventEmitter.on('chatroomDeleted', sendUpdateDebounced);
+  chatEventEmitter.on('chatroomListUpdated', sendUpdateDebounced);
 
   // Clean up when connection closes
   req.on('close', () => {
-    chatEventEmitter.off('chatroomCreated', sendUpdate);
-    chatEventEmitter.off('chatroomDeleted', sendUpdate);
-    chatEventEmitter.off('chatroomListUpdated', sendUpdate);
-    res.end();
+    console.log(`[SSE] Client disconnected from chatroom list: ${userAid}`);
+    clearInterval(heartbeatInterval);
+    if (updateTimeout) clearTimeout(updateTimeout);
+    chatEventEmitter.off('chatroomCreated', sendUpdateDebounced);
+    chatEventEmitter.off('chatroomDeleted', sendUpdateDebounced);
+    chatEventEmitter.off('chatroomListUpdated', sendUpdateDebounced);
+    if (!res.writableEnded) {
+      res.end();
+    }
   });
 });
 
