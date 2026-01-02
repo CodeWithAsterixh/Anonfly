@@ -2,9 +2,9 @@ import { WebSocket } from 'ws';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import ChatRoom from '../../../lib/models/chatRoom';
-import { activeChatrooms } from '../../index';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import { removeMessageFromCache, updateMessageInCache } from '../../../lib/helpers/messageCache';
+import { activeChatrooms } from '../../../lib/services/websocket/clientManager';
 
 const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
   method: 'delete',
