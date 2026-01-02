@@ -37,4 +37,5 @@ export const rateLimiter = (limit: number = 100, windowMs: number = 60 * 1000) =
 // Specialized limiters
 export const createRoomLimiter = rateLimiter(5, 60 * 60 * 1000); // 5 rooms per hour
 export const authLimiter = rateLimiter(10, 5 * 60 * 1000); // 10 auth attempts per 5 mins
+export const premiumCheckLimiter = rateLimiter(10, 2 * 60 * 60 * 1000); // 1 request per 2 hours
 export const messageLimiter = rateLimiter(30, 10 * 1000); // 30 messages per 10 seconds (for HTTP-based message sending)

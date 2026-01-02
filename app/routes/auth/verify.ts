@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { challengeStore, sessionStore } from '../../../lib/helpers/sessionStore';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
-import { getPermissionsByUserId } from '../../../lib/helpers/permissionHelper';
+import { getPermissionsByUserId, hasFeature } from '../../../lib/helpers/permissionHelper';
 
 import { validate, verifyIdentitySchema } from '../../../lib/helpers/validation';
 import { authLimiter } from '../../../lib/middlewares/rateLimiter';
@@ -72,10 +72,6 @@ const verifyRoute: Omit<RouteConfig, 'app'> = {
       // Cleanup challenge
       await challengeStore.delete(aid);
 
-      // Get user permissions
-      const permissions = await getPermissionsByUserId(aid);
-      const allowedFeatures = permissions ? permissions.allowedFeatures : [];
-
       // Create session
       const token = uuidv4();
       await sessionStore.set(token, {
@@ -85,12 +81,23 @@ const verifyRoute: Omit<RouteConfig, 'app'> = {
         exchangePublicKey,
       });
 
+      // Get user permissions/features from DB
+      const permissions = await getPermissionsByUserId(aid);
+      const allowedFeatures = permissions ? permissions.allowedFeatures : [];
+      const isPremium = hasFeature(allowedFeatures, 'CREATE_PRIVATE_ROOM');
+
       return {
         message: 'Handshake successful',
         statusCode: 200,
         success: true,
         status: 'good',
-        data: { token, aid, username, allowedFeatures },
+        data: { 
+          token, 
+          aid, 
+          username,
+          allowedFeatures,
+          isPremium
+        },
       };
     } catch (error: any) {
       return {

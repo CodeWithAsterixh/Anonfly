@@ -22,7 +22,7 @@ export async function handleJoinChatroom(
   parsedMessage: any,
   handleParsedMessage: (wsClient: CustomWebSocket, parsedMessage: any) => Promise<void>
 ) {
-  const { chatroomId, userAid, username, password, linkToken, publicKey, exchangePublicKey } = parsedMessage;
+  const { chatroomId, userAid, username, password, linkToken, publicKey, exchangePublicKey, allowedFeatures } = parsedMessage;
 
   // If the client is already in a chatroom, remove them from the previous one first
   if (wsClient.chatroomId && wsClient.chatroomId !== chatroomId) {
@@ -33,6 +33,7 @@ export async function handleJoinChatroom(
   wsClient.syncing = true;
   wsClient.userAid = userAid;
   wsClient.username = username;
+  wsClient.allowedFeatures = allowedFeatures;
   
   const chatroom = await ChatRoom.findById(chatroomId);
   if (!chatroom) {
@@ -141,6 +142,10 @@ export async function handleJoinChatroom(
       logger.info(`User ${wsClient.userAid} rejoined after 1 hour. Resetting joinedAt.`);
       participant.joinedAt = new Date();
     }
+    // Update features if changed
+    if (allowedFeatures) {
+      participant.allowedFeatures = allowedFeatures;
+    }
     // Always clear leftAt when rejoining
     participant.leftAt = undefined;
     await chatroom.save();
@@ -151,6 +156,7 @@ export async function handleJoinChatroom(
       username: wsClient.username,
       publicKey: publicKey,
       exchangePublicKey: exchangePublicKey,
+      allowedFeatures: allowedFeatures,
       joinedAt: new Date()
     });
     // If no host, set as host
@@ -182,7 +188,8 @@ export async function handleJoinChatroom(
       userAid: p.userAid,
       username: p.username,
       publicKey: p.publicKey,
-      exchangePublicKey: p.exchangePublicKey
+      exchangePublicKey: p.exchangePublicKey,
+      allowedFeatures: p.allowedFeatures
     }))
   }));
 
@@ -197,6 +204,7 @@ export async function handleJoinChatroom(
         username: wsClient.username,
         publicKey: finalPublicKey,
         exchangePublicKey: finalExchangePublicKey,
+        allowedFeatures: allowedFeatures,
         timestamp: new Date().toISOString(),
         isCreator: isCreatorJoining
       });

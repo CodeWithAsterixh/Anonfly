@@ -27,6 +27,7 @@ import unbanParticipantRoute from "./routes/chatroom/unbanParticipant";
 import chatroomSSERoute from "./routes/chatroom/chatroomSSE";
 import challengeRoute from "./routes/auth/challenge";
 import verifyRoute from "./routes/auth/verify";
+import premiumRoute from "./routes/auth/premium";
 import getMyModerationTokenRoute from "./routes/auth/getModerationToken";
 
 import homeRoute from "./routes/homeRoute";
@@ -107,6 +108,7 @@ router(deleteMessageRoute); // Use the new route
 
 router(challengeRoute);
 router(verifyRoute);
+router(premiumRoute);
 router(getMyModerationTokenRoute);
 
 router(joinChatroomRoute);

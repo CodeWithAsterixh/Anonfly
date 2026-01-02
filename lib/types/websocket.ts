@@ -6,6 +6,7 @@ export interface CustomWebSocket extends WebSocket {
   userAid?: string; // Anonymous Identity
   chatroomId?: string; 
   username?: string; 
+  allowedFeatures?: string[];
   syncing?: boolean; 
   messageQueue?: any[]; 
 }

@@ -46,6 +46,7 @@ export interface IParticipant {
   username: string;
   publicKey?: string; // Identity Public Key
   exchangePublicKey?: string; // Exchange Public Key
+  allowedFeatures?: string[];
   joinedAt?: Date;
   leftAt?: Date; // Timestamp when user left the room
 }
@@ -62,6 +63,7 @@ const ParticipantSchema = new Schema<IParticipant>({
   username: { type: String, required: true },
   publicKey: { type: String },
   exchangePublicKey: { type: String },
+  allowedFeatures: [{ type: String }],
   joinedAt: { type: Date, default: Date.now },
   leftAt: { type: Date },
 }, { _id: false });
