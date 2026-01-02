@@ -64,6 +64,7 @@ export interface IChatRoom extends Document {
   description?: string;
   region?: string; // Add region for location-based sorting
   hostAid: string;
+  creatorAid: string;
   participants: IParticipant[];
   messages: IMessage[];
   encryptedRoomKey?: string; // Encrypted for the host
@@ -77,6 +78,7 @@ const ChatRoomSchema = new Schema<IChatRoom>({
   description: { type: String, default: "" },
   region: { type: String }, // Optional region field
   hostAid: { type: String, required: true },
+  creatorAid: { type: String, required: true },
   encryptedRoomKey: { type: String },
   roomKeyIv: { type: String },
   password: { type: String },

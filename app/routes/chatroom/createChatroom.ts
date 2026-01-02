@@ -61,6 +61,7 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
         description,
         region,
         hostAid,
+        creatorAid: hostAid,
         password: hashedPassword,
         isLocked,
         participants: [], // Don't add host as participant until they connect via WS
