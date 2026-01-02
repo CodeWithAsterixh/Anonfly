@@ -70,7 +70,20 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
       try {
         const decoded = validateRoomAccessToken(linkToken);
         if (decoded.roomId === chatroomId) {
-          if (!chatroom.password || decoded.password === chatroom.password) {
+          // A match is either direct (both are hashes) or via bcrypt (one is raw, one is hash)
+          const roomPwd = chatroom.password || null;
+          const tokenPwd = decoded.password || null;
+          
+          let isMatch = roomPwd === tokenPwd;
+          if (!isMatch && roomPwd && tokenPwd) {
+            try {
+              isMatch = await bcrypt.compare(tokenPwd, roomPwd);
+            } catch (e) {
+              isMatch = false;
+            }
+          }
+
+          if (!roomPwd || isMatch) {
             isTokenValid = true;
           }
         }
