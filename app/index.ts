@@ -18,6 +18,8 @@ import deleteChatroomRoute from "./routes/chatroom/deleteChatroom";
 import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
 import editChatroomRoute from "./routes/chatroom/editChatroom";
 import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
+import generateShareLinkRoute from "./routes/chatroom/generateShareLink";
+import validateShareLinkRoute from "./routes/chatroom/validateShareLink";
 import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
 import removeParticipantRoute from "./routes/chatroom/removeParticipant";
 import chatroomSSERoute from "./routes/chatroom/chatroomSSE";
@@ -113,6 +115,8 @@ router(deleteChatroomRoute);
 router(editChatroomRoute);
 
 router(leaveChatroomRoute);
+router(generateShareLinkRoute);
+router(validateShareLinkRoute);
 router(removeParticipantRoute);
 
 // Start the server

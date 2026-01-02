@@ -81,7 +81,7 @@ export async function handleJoinChatroom(
       return;
     }
 
-    const isMatch = await bcrypt.compare(password, chatroom.password);
+    const isMatch = password === chatroom.password || await bcrypt.compare(password, chatroom.password);
     if (!isMatch) {
       wsClient.send(JSON.stringify({ type: 'error', message: 'Incorrect password' }));
       wsClient.syncing = false;

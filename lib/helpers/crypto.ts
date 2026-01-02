@@ -1,4 +1,65 @@
 import * as crypto from 'crypto';
+import env from '../constants/env';
+
+const ENCRYPTION_KEY = crypto.scryptSync(env.JWT_ACCESS_SECRET || 'default-secret', 'salt', 32);
+const ALGORITHM = 'aes-256-cbc';
+
+/**
+ * Encrypts a string using AES-256-CBC.
+ */
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return `${iv.toString('hex')}:${encrypted}`;
+}
+
+/**
+ * Decrypts a string using AES-256-CBC.
+ */
+export function decrypt(text: string): string {
+  const [ivHex, encryptedText] = text.split(':');
+  if (!ivHex || !encryptedText) throw new Error('Invalid encrypted text format');
+  const iv = Buffer.from(ivHex, 'hex');
+  const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
+/**
+ * Generates a signed token for room access.
+ */
+export function generateRoomAccessToken(roomId: string, password?: string): string {
+  const payload = JSON.stringify({
+    roomId,
+    password: password || null,
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours expiry
+  });
+  return encrypt(payload);
+}
+
+/**
+ * Validates and decrypts a room access token.
+ */
+export function validateRoomAccessToken(token: string): { roomId: string; password?: string } {
+  try {
+    const decrypted = decrypt(token);
+    const payload = JSON.parse(decrypted);
+
+    if (payload.expiresAt < Date.now()) {
+      throw new Error('Token expired');
+    }
+
+    return {
+      roomId: payload.roomId,
+      password: payload.password || undefined,
+    };
+  } catch (err) {
+    throw new Error('Invalid or expired token');
+  }
+}
 
 /**
  * Verifies an Ed25519 signature.
