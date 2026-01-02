@@ -29,6 +29,39 @@ export function decrypt(text: string): string {
 }
 
 /**
+ * Generates a short-lived authorization token for joining a room.
+ * This token is issued after a share link is validated.
+ */
+export function generateJoinAuthToken(roomId: string, userAid: string): string {
+  const payload = JSON.stringify({
+    roomId,
+    userAid,
+    expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes expiry
+    type: 'join_auth'
+  });
+  return encrypt(payload);
+}
+
+/**
+ * Validates a join authorization token.
+ */
+export function validateJoinAuthToken(token: string, roomId: string, userAid: string): boolean {
+  try {
+    const decrypted = decrypt(token);
+    const payload = JSON.parse(decrypted);
+
+    return (
+      payload.type === 'join_auth' &&
+      payload.roomId === roomId &&
+      payload.userAid === userAid &&
+      payload.expiresAt > Date.now()
+    );
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
  * Generates a signed token for room access.
  */
 export function generateRoomAccessToken(roomId: string, password?: string): string {

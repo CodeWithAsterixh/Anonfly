@@ -2,7 +2,7 @@ import ChatRoom from '../../../lib/models/chatRoom';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
-import { validateRoomAccessToken } from '../../../lib/helpers/crypto';
+import { validateRoomAccessToken, generateJoinAuthToken } from '../../../lib/helpers/crypto';
 import { Types } from 'mongoose';
 import bcrypt from 'bcrypt';
 
@@ -90,6 +90,9 @@ const validateShareLinkRoute: Omit<RouteConfig, 'app'> = {
         return { message: 'Invalid access token for this room', statusCode: 403, success: false, status: 'bad' };
       }
 
+      // Generate a short-lived join authorization token
+      const joinAuthToken = generateJoinAuthToken(chatroom._id.toString(), userAid);
+
       return {
         message: 'Link validated successfully',
         statusCode: 200,
@@ -100,7 +103,8 @@ const validateShareLinkRoute: Omit<RouteConfig, 'app'> = {
           roomname: chatroom.roomname,
           isLocked: chatroom.isLocked,
           password: chatroom.isLocked ? password : undefined,
-          accessGranted: true
+          accessGranted: true,
+          joinAuthToken // Include the token
         },
       };
     } catch (err: any) {

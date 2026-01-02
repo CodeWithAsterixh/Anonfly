@@ -4,7 +4,7 @@ import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import bcrypt from 'bcrypt';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
-import { validateRoomAccessToken } from '../../../lib/helpers/crypto';
+import { validateRoomAccessToken, validateJoinAuthToken } from '../../../lib/helpers/crypto';
 
 import { validate, joinChatroomSchema } from '../../../lib/helpers/validation';
 
@@ -15,7 +15,7 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   handler: withErrorHandling(async (event) => {
     const { req, params, body } = event;
     const { id: chatroomId } = params;
-    const { password, linkToken } = body as { password?: string, linkToken?: string };
+    const { password, linkToken, joinAuthToken } = body as { password?: string, linkToken?: string, joinAuthToken?: string };
     const userAid = (req as any)?.userAid;
     const username = (req as any)?.username;
 
@@ -61,12 +61,19 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // Check if user is already a participant
-    const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
+    const isParticipant = chatroom.participants.some(p => p.userAid === userAid && !p.leftAt);
     const isCreator = userAid === chatroom.creatorAid;
     let isTokenValid = false;
 
-    // Link token validation (for both private and locked rooms)
-    if (linkToken && !isCreator && !isParticipant) {
+    // 1. Check joinAuthToken (short-lived proof from validate-link)
+    if (joinAuthToken && !isCreator && !isParticipant) {
+      if (validateJoinAuthToken(joinAuthToken, chatroomId, userAid)) {
+        isTokenValid = true;
+      }
+    }
+
+    // 2. Link token validation (the long-lived invite link itself)
+    if (!isTokenValid && linkToken && !isCreator && !isParticipant) {
       try {
         const decoded = validateRoomAccessToken(linkToken);
         if (decoded.roomId === chatroomId) {

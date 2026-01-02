@@ -6,7 +6,7 @@ import ChatRoom from '../../../models/chatRoom';
 import chatEventEmitter from '../../../helpers/eventEmitter';
 import { getCachedMessages, cacheMessages } from '../../../helpers/messageCache';
 import { activeChatrooms, addClientToChatroom, removeClientFromChatroom } from '../clientManager';
-import { validateRoomAccessToken } from '../../../helpers/crypto';
+import { validateRoomAccessToken, validateJoinAuthToken } from '../../../helpers/crypto';
 import env from '../../../constants/env';
 
 const logger = pino({
@@ -22,7 +22,17 @@ export async function handleJoinChatroom(
   parsedMessage: any,
   handleParsedMessage: (wsClient: CustomWebSocket, parsedMessage: any) => Promise<void>
 ) {
-  const { chatroomId, userAid, username, password, linkToken, publicKey, exchangePublicKey, allowedFeatures } = parsedMessage;
+  const { 
+    chatroomId, 
+    userAid, 
+    username, 
+    password, 
+    linkToken, 
+    joinAuthToken, // Add this
+    publicKey, 
+    exchangePublicKey, 
+    allowedFeatures 
+  } = parsedMessage;
 
   // If the client is already in a chatroom, remove them from the previous one first
   if (wsClient.chatroomId && wsClient.chatroomId !== chatroomId) {
@@ -54,12 +64,19 @@ export async function handleJoinChatroom(
     return;
   }
 
-  const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
+  const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid && !p.leftAt);
   const isCreator = wsClient.userAid === chatroom.creatorAid;
   let isTokenValid = false;
 
-  // Link token validation (for both private and locked rooms)
-  if (linkToken && !isCreator && !participant) {
+  // 1. Check joinAuthToken (short-lived proof from validate-link)
+  if (joinAuthToken && !isCreator && !participant && wsClient.userAid) {
+    if (validateJoinAuthToken(joinAuthToken, chatroomId, wsClient.userAid)) {
+      isTokenValid = true;
+    }
+  }
+
+  // 2. Link token validation (the long-lived invite link itself)
+  if (!isTokenValid && linkToken && !isCreator && !participant) {
     try {
       const decoded = validateRoomAccessToken(linkToken);
       if (decoded.roomId === chatroomId) {

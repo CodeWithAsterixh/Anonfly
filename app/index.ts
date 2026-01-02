@@ -20,6 +20,7 @@ import editChatroomRoute from "./routes/chatroom/editChatroom";
 import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
 import generateShareLinkRoute from "./routes/chatroom/generateShareLink";
 import validateShareLinkRoute from "./routes/chatroom/validateShareLink";
+import checkAccessRoute from "./routes/chatroom/checkAccess";
 import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
 import removeParticipantRoute from "./routes/chatroom/removeParticipant";
 import banParticipantRoute from "./routes/chatroom/banParticipant";
@@ -121,6 +122,7 @@ router(editChatroomRoute);
 router(leaveChatroomRoute);
 router(generateShareLinkRoute);
 router(validateShareLinkRoute);
+router(checkAccessRoute);
 router(removeParticipantRoute);
 router(banParticipantRoute);
 router(unbanParticipantRoute);
