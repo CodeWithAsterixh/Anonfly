@@ -62,35 +62,31 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
 
     // Check if user is already a participant
     const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
+    const isCreator = userAid === chatroom.creatorAid;
+    let isTokenValid = false;
 
-    // Private room access control
-    if (chatroom.isPrivate && !isParticipant) {
-      if (!linkToken) {
-        return {
-          message: 'This is a private room. Access is only allowed via a secure invite link.',
-          statusCode: 403,
-          success: false,
-          status: 'bad',
-        };
-      }
-
+    // Link token validation (for both private and locked rooms)
+    if (linkToken && !isCreator && !isParticipant) {
       try {
         const decoded = validateRoomAccessToken(linkToken);
-        if (decoded.roomId !== chatroomId) {
-          throw new Error('Invalid token for this room');
+        if (decoded.roomId === chatroomId) {
+          if (!chatroom.password || decoded.password === chatroom.password) {
+            isTokenValid = true;
+          }
         }
-        // If it's a private room, the linkToken must also contain the correct password hash
-        if (chatroom.password && decoded.password !== chatroom.password) {
-          throw new Error('Invalid access token');
-        }
-      } catch (err: any) {
-        return {
-          message: 'Invalid or expired invite link.',
-          statusCode: 403,
-          success: false,
-          status: 'bad',
-        };
+      } catch (err) {
+        // Token invalid or expired, will fall back to other checks if needed
       }
+    }
+
+    // Private room access control
+    if (chatroom.isPrivate && !isParticipant && !isCreator && !isTokenValid) {
+      return {
+        message: 'This is a private room. Access is only allowed via a secure invite link.',
+        statusCode: 403,
+        success: false,
+        status: 'bad',
+      };
     }
 
     if (isParticipant) {
@@ -104,7 +100,8 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // Password verification for locked rooms
-    if (chatroom.isLocked && chatroom.password) {
+    // Allow if user is creator, already a participant, or has a valid link token
+    if (chatroom.isLocked && chatroom.password && !isCreator && !isParticipant && !isTokenValid) {
       if (!password) {
         return {
           message: 'Password required for this chatroom',

@@ -56,35 +56,31 @@ export async function handleJoinChatroom(
 
   const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
   const isCreator = wsClient.userAid === chatroom.creatorAid;
+  let isTokenValid = false;
 
-  // Private room access control
-  // Allow if user is creator or already a participant
-  if (chatroom.isPrivate && !isCreator && !participant) {
-    if (!linkToken) {
-      wsClient.send(JSON.stringify({ 
-        type: 'error', 
-        message: 'This is a private room. Access is only allowed via a secure invite link.' 
-      }));
-      wsClient.syncing = false;
-      return;
-    }
-
+  // Link token validation (for both private and locked rooms)
+  if (linkToken && !isCreator && !participant) {
     try {
       const decoded = validateRoomAccessToken(linkToken);
-      if (decoded.roomId !== chatroomId) {
-        throw new Error('Invalid token for this room');
+      if (decoded.roomId === chatroomId) {
+        if (!chatroom.password || decoded.password === chatroom.password) {
+          isTokenValid = true;
+        }
       }
-      if (chatroom.password && decoded.password !== chatroom.password) {
-        throw new Error('Invalid access token');
-      }
-    } catch (err: any) {
-      wsClient.send(JSON.stringify({ 
-        type: 'error', 
-        message: 'Invalid or expired invite link.' 
-      }));
-      wsClient.syncing = false;
-      return;
+    } catch (err) {
+      // Token invalid or expired, will fall back to other checks if needed
+      logger.debug(`Invalid link token provided for room ${chatroomId}`);
     }
+  }
+
+  // Private room access control
+  if (chatroom.isPrivate && !isCreator && !participant && !isTokenValid) {
+    wsClient.send(JSON.stringify({ 
+      type: 'error', 
+      message: 'This is a private room. Access is only allowed via a secure invite link.' 
+    }));
+    wsClient.syncing = false;
+    return;
   }
 
   // Migration for existing rooms without creatorAid
@@ -115,8 +111,8 @@ export async function handleJoinChatroom(
   }
   
   // Password verification for locked rooms
-  // Allow if user is creator or already a participant
-  if (chatroom.isLocked && chatroom.password && !isCreator && !participant) {
+  // Allow if user is creator, already a participant, or has a valid link token
+  if (chatroom.isLocked && chatroom.password && !isCreator && !participant && !isTokenValid) {
     if (!password) {
       wsClient.send(JSON.stringify({ 
         type: 'error', 
