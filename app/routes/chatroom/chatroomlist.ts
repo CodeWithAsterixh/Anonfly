@@ -17,6 +17,11 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
   if (!chatrooms) {
     chatrooms = await ChatRoom.aggregate([
       {
+        $match: {
+          isPrivate: { $ne: true }
+        }
+      },
+      {
         $addFields: {
           lastMessage: {
             $arrayElemAt: ["$messages", -1]
@@ -41,7 +46,43 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
     await cacheChatroomList(chatrooms);
   }
 
-  const formattedRooms = chatrooms.map(room => {
+  // Fetch private rooms that this user is a participant in or is the host of
+  const privateRooms = await ChatRoom.aggregate([
+    {
+      $match: {
+        isPrivate: true,
+        $or: [
+          { hostAid: userAid },
+          { "participants.userAid": userAid }
+        ]
+      }
+    },
+    {
+      $addFields: {
+        lastMessage: {
+          $arrayElemAt: ["$messages", -1]
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        roomname: 1,
+        description: 1,
+        region: 1,
+        hostAid: 1,
+        participants: 1,
+        isLocked: 1,
+        isPrivate: 1,
+        lastMessage: "$lastMessage.content",
+      }
+    }
+  ]);
+
+  // Merge public rooms with user's private rooms
+  const allRooms = [...chatrooms, ...privateRooms];
+
+  const formattedRooms = allRooms.map(room => {
     const lastMessageContent = room.lastMessage || null;
     const isParticipant = room.participants.some((p: IParticipant) => p.userAid === userAid);
 
@@ -53,6 +94,7 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
       hostAid: room.hostAid,
       participantCount: room.participants.filter((p: IParticipant) => !p.leftAt).length,
       isLocked: room.isLocked || false,
+      isPrivate: room.isPrivate || false,
       lastMessage: isParticipant ? lastMessageContent : null,
     };
   });

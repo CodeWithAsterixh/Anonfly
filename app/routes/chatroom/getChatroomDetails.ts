@@ -13,13 +13,24 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
     const userAid = (event.req as any)?.userAid;
 
     const chatroom = await ChatRoom.findById(chatroomId).select(
-      "roomname description hostAid participants isLocked"
+      "roomname description hostAid creatorAid participants isLocked isPrivate"
     );
 
     if (!chatroom) {
       return {
         message: "Chatroom not found",
         statusCode: 404,
+        success: false,
+        status: "bad",
+      };
+    }
+
+    const isParticipant = chatroom.participants.some(p => p.userAid === userAid && !p.leftAt);
+
+    if (chatroom.isPrivate && !isParticipant) {
+      return {
+        message: "This is a private room. Access is restricted.",
+        statusCode: 403,
         success: false,
         status: "bad",
       };
@@ -43,7 +54,9 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
         roomname: chatroom.roomname,
         description: chatroom.description,
         hostAid: chatroom.hostAid,
+        creatorAid: chatroom.creatorAid,
         isLocked: chatroom.isLocked || false,
+        isPrivate: chatroom.isPrivate || false,
         participantCount: chatroom.participants.filter(p => !p.leftAt).length,
         allowedFeatures, // Only populated for the host
         participants: chatroom.participants.filter(p => !p.leftAt).map((p) => ({

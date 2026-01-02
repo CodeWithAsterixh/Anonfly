@@ -6,6 +6,7 @@ import ChatRoom from '../../../models/chatRoom';
 import chatEventEmitter from '../../../helpers/eventEmitter';
 import { getCachedMessages, cacheMessages } from '../../../helpers/messageCache';
 import { activeChatrooms, addClientToChatroom, removeClientFromChatroom } from '../clientManager';
+import { validateRoomAccessToken } from '../../../helpers/crypto';
 import env from '../../../constants/env';
 
 const logger = pino({
@@ -21,7 +22,7 @@ export async function handleJoinChatroom(
   parsedMessage: any,
   handleParsedMessage: (wsClient: CustomWebSocket, parsedMessage: any) => Promise<void>
 ) {
-  const { chatroomId, userAid, username, password, publicKey, exchangePublicKey } = parsedMessage;
+  const { chatroomId, userAid, username, password, linkToken, publicKey, exchangePublicKey } = parsedMessage;
 
   // If the client is already in a chatroom, remove them from the previous one first
   if (wsClient.chatroomId && wsClient.chatroomId !== chatroomId) {
@@ -53,6 +54,35 @@ export async function handleJoinChatroom(
   }
 
   const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
+
+  // Private room access control
+  if (chatroom.isPrivate && !participant) {
+    if (!linkToken) {
+      wsClient.send(JSON.stringify({ 
+        type: 'error', 
+        message: 'This is a private room. Access is only allowed via a secure invite link.' 
+      }));
+      wsClient.syncing = false;
+      return;
+    }
+
+    try {
+      const decoded = validateRoomAccessToken(linkToken);
+      if (decoded.roomId !== chatroomId) {
+        throw new Error('Invalid token for this room');
+      }
+      if (chatroom.password && decoded.password !== chatroom.password) {
+        throw new Error('Invalid access token');
+      }
+    } catch (err: any) {
+      wsClient.send(JSON.stringify({ 
+        type: 'error', 
+        message: 'Invalid or expired invite link.' 
+      }));
+      wsClient.syncing = false;
+      return;
+    }
+  }
 
   // Migration for existing rooms without creatorAid
   if (!chatroom.creatorAid) {

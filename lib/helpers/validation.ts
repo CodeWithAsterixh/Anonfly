@@ -27,6 +27,7 @@ export const chatroomSchema = z.object({
     description: z.string().max(200).trim().optional(),
     password: z.string().min(4).max(50).optional(),
     region: z.string().max(50).optional(),
+    isPrivate: z.boolean().optional(),
   }),
 });
 
@@ -35,6 +36,7 @@ export const joinChatroomSchema = z.object({
     chatroomId: z.string().min(1),
     password: z.string().optional(),
     username: z.string().min(2).max(30).trim(),
+    linkToken: z.string().optional(),
   }),
 });
 

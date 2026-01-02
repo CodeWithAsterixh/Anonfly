@@ -5,6 +5,8 @@ import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 import bcrypt from 'bcrypt';
 import { getPermissionsByUserId } from '../../../lib/helpers/permissionHelper';
+import { FEATURES } from '../../../lib/constants/features';
+import crypto from 'crypto';
 
 import { validate, chatroomSchema } from '../../../lib/helpers/validation';
 import { createRoomLimiter } from '../../../lib/middlewares/rateLimiter';
@@ -15,11 +17,12 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   middleware: [verifyToken, validate(chatroomSchema), createRoomLimiter], // Limit to 5 rooms per hour
   handler: withErrorHandling(async (event) => {
     const { body, req } = event;
-    const { roomname, description, password, region } = body as { 
+    const { roomname, description, password, region, isPrivate } = body as { 
       roomname: string; 
       description?: string; 
       password?: string;
       region?: string;
+      isPrivate?: boolean;
     };
 
     if (!roomname) {
@@ -46,12 +49,40 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
 
     try {
       // Ensure host has permission record
-      await getPermissionsByUserId(hostAid);
+      const permissions = await getPermissionsByUserId(hostAid);
 
       let hashedPassword;
       let isLocked = false;
+      let finalIsPrivate = false;
 
-      if (password && password.trim() !== '') {
+      // Handle private room logic
+      if (isPrivate) {
+        // Verify premium status for private rooms
+        if (!permissions || !permissions.allowedFeatures.includes(FEATURES.CREATE_PRIVATE_ROOM)) {
+          return {
+            message: 'Premium feature: Upgrade to create private rooms.',
+            statusCode: 403,
+            success: false,
+            status: 'bad',
+          };
+        }
+
+        if (permissions.tokenExpiresAt && new Date() > permissions.tokenExpiresAt) {
+          return {
+            message: 'Your premium plan has expired. Please renew to create private rooms.',
+            statusCode: 403,
+            success: false,
+            status: 'bad',
+          };
+        }
+
+        finalIsPrivate = true;
+        isLocked = true; // Private rooms are always locked
+        
+        // If no password provided for private room, generate one
+        const effectivePassword = password || crypto.randomBytes(16).toString('hex');
+        hashedPassword = await bcrypt.hash(effectivePassword, 10);
+      } else if (password && password.trim() !== '') {
         hashedPassword = await bcrypt.hash(password, 10);
         isLocked = true;
       }
@@ -64,6 +95,7 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
         creatorAid: hostAid,
         password: hashedPassword,
         isLocked,
+        isPrivate: finalIsPrivate,
         participants: [], // Don't add host as participant until they connect via WS
       });
 

@@ -79,6 +79,7 @@ export interface IChatRoom extends Document {
   roomKeyIv?: string;
   password?: string; // Hashed password
   isLocked: boolean;
+  isPrivate: boolean;
 }
 
 const ChatRoomSchema = new Schema<IChatRoom>({
@@ -91,6 +92,7 @@ const ChatRoomSchema = new Schema<IChatRoom>({
   roomKeyIv: { type: String },
   password: { type: String },
   isLocked: { type: Boolean, default: false },
+  isPrivate: { type: Boolean, default: false },
   participants: [ParticipantSchema],
   bans: [new Schema({
     userAid: { type: String, required: true },

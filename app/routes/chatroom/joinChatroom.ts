@@ -4,6 +4,7 @@ import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import bcrypt from 'bcrypt';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
+import { validateRoomAccessToken } from '../../../lib/helpers/crypto';
 
 import { validate, joinChatroomSchema } from '../../../lib/helpers/validation';
 
@@ -14,7 +15,7 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   handler: withErrorHandling(async (event) => {
     const { req, params, body } = event;
     const { id: chatroomId } = params;
-    const { password } = body as { password?: string };
+    const { password, linkToken } = body as { password?: string, linkToken?: string };
     const userAid = (req as any)?.userAid;
     const username = (req as any)?.username;
 
@@ -61,6 +62,36 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
 
     // Check if user is already a participant
     const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
+
+    // Private room access control
+    if (chatroom.isPrivate && !isParticipant) {
+      if (!linkToken) {
+        return {
+          message: 'This is a private room. Access is only allowed via a secure invite link.',
+          statusCode: 403,
+          success: false,
+          status: 'bad',
+        };
+      }
+
+      try {
+        const decoded = validateRoomAccessToken(linkToken);
+        if (decoded.roomId !== chatroomId) {
+          throw new Error('Invalid token for this room');
+        }
+        // If it's a private room, the linkToken must also contain the correct password hash
+        if (chatroom.password && decoded.password !== chatroom.password) {
+          throw new Error('Invalid access token');
+        }
+      } catch (err: any) {
+        return {
+          message: 'Invalid or expired invite link.',
+          statusCode: 403,
+          success: false,
+          status: 'bad',
+        };
+      }
+    }
 
     if (isParticipant) {
       return {
