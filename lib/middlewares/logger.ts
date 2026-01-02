@@ -3,7 +3,7 @@
  * Uses pino for high-performance logging with JSON output
  */
 import pino from 'pino';
-import env from '../constants/env.js';
+import env from '../constants/env';
 
 // Configure logger based on environment
 const logger = pino({
