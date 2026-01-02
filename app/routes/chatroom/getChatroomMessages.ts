@@ -23,12 +23,11 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
     }
 
     const userAid = (req as any).userAid;
-    const isHost = chatroom.hostAid === userAid;
-    const currentParticipant = chatroom.participants.find(p => p.userAid === userAid);
-    const joinedAt = currentParticipant?.joinedAt ? new Date(currentParticipant.joinedAt).getTime() : 0;
+    const participant = chatroom.participants.find(p => p.userAid === userAid);
+    const joinedAt = participant?.joinedAt ? new Date(participant.joinedAt).getTime() : 0;
 
     let messages = chatroom.messages;
-    if (!isHost && joinedAt > 0) {
+    if (joinedAt > 0) {
       messages = messages.filter(msg => new Date(msg.timestamp).getTime() >= joinedAt);
     }
 

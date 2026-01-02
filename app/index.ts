@@ -452,16 +452,15 @@ wss.on('connection', (ws: WebSocket) => {
           }
         }
 
-        // Filter messages for non-hosts: only show messages from the time they joined
-        const isHost = chatroom.hostAid === wsClient.userAid;
+        // Filter messages: only show messages from the time they joined (incognito mode)
         const currentParticipant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
         const joinedAt = currentParticipant?.joinedAt ? new Date(currentParticipant.joinedAt).getTime() : 0;
 
         for (const msg of cachedMessages) {
           const msgTimestamp = new Date(msg.timestamp).getTime();
           
-          // Skip messages if user is not host and message was sent before they joined
-          if (!isHost && joinedAt > 0 && msgTimestamp < joinedAt) {
+          // Skip messages sent before the user joined/rejoined
+          if (joinedAt > 0 && msgTimestamp < joinedAt) {
             continue;
           }
 
