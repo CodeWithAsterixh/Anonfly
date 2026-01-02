@@ -40,6 +40,18 @@ export async function handleJoinChatroom(
     return;
   }
 
+  // Check if user is banned
+  const isBanned = chatroom.bans?.some(b => b.userAid === wsClient.userAid);
+  if (isBanned) {
+    wsClient.send(JSON.stringify({ 
+      type: 'error', 
+      message: 'You were banned from this room and cannot rejoin.',
+      reason: 'banned'
+    }));
+    wsClient.syncing = false;
+    return;
+  }
+
   const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
 
   // Migration for existing rooms without creatorAid

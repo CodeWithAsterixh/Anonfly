@@ -36,6 +36,28 @@ export function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   }
 }
 
+export function forceDisconnectClient(chatroomId: string, userAid: string, reason: 'removed' | 'banned') {
+  const chatroomClients = activeChatrooms.get(chatroomId);
+  if (chatroomClients) {
+    for (const [wsId, ws] of chatroomClients) {
+      if (ws.userAid === userAid) {
+        ws.send(JSON.stringify({ 
+          type: 'forceDisconnect', 
+          reason,
+          message: reason === 'banned' 
+            ? 'You were banned from this room and cannot rejoin.' 
+            : 'You were removed from the room by the moderator.'
+        }));
+        
+        // Remove from room map to stop further messages
+        chatroomClients.delete(wsId);
+        ws.chatroomId = undefined;
+        logger.info(`Force disconnected client ${userAid} from room ${chatroomId} for ${reason}`);
+      }
+    }
+  }
+}
+
 export async function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {

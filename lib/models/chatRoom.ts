@@ -50,6 +50,13 @@ export interface IParticipant {
   leftAt?: Date; // Timestamp when user left the room
 }
 
+export interface IBan {
+  userAid: string;
+  username: string;
+  bannedAt: Date;
+  reason?: string;
+}
+
 const ParticipantSchema = new Schema<IParticipant>({
   userAid: { type: String, required: true },
   username: { type: String, required: true },
@@ -67,6 +74,7 @@ export interface IChatRoom extends Document {
   creatorAid: string;
   participants: IParticipant[];
   messages: IMessage[];
+  bans: IBan[];
   encryptedRoomKey?: string; // Encrypted for the host
   roomKeyIv?: string;
   password?: string; // Hashed password
@@ -84,6 +92,12 @@ const ChatRoomSchema = new Schema<IChatRoom>({
   password: { type: String },
   isLocked: { type: Boolean, default: false },
   participants: [ParticipantSchema],
+  bans: [new Schema({
+    userAid: { type: String, required: true },
+    username: { type: String, required: true },
+    bannedAt: { type: Date, default: Date.now },
+    reason: { type: String },
+  }, { _id: false })],
   messages: [new Schema({
     senderAid: { type: String, required: true },
     senderUsername: { type: String }, // Add username to schema

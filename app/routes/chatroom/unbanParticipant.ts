@@ -2,13 +2,14 @@ import ChatRoom from '../../../lib/models/chatRoom';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
+import { FEATURES } from '../../../lib/constants/features';
+import { getPermissionsByUserId } from '../../../lib/helpers/permissionHelper';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
-import { forceDisconnectClient } from '../../../lib/services/websocket/clientManager';
 
-const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
-  method: 'delete',
-  path: '/chatrooms/:chatroomId/participants/:userAid',
-  middleware: [verifyToken], // Basic token verification first
+const unbanParticipantRoute: Omit<RouteConfig, 'app'> = {
+  method: 'post',
+  path: '/chatrooms/:chatroomId/participants/:userAid/unban',
+  middleware: [verifyToken],
   handler: withErrorHandling(async (event) => {
     const { req, params } = event;
     const { chatroomId, userAid: targetUserAid } = params;
@@ -34,51 +35,47 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // Check if the requester is the host or creator
-    const isAuthorized = chatroom.hostAid === requesterAid || chatroom.creatorAid === requesterAid;
-    if (!isAuthorized) {
+    // 1. Only the room creator can unban
+    if (chatroom.creatorAid !== requesterAid) {
       return {
-        message: 'Unauthorized: Only the host or creator can remove participants',
+        message: 'Unauthorized: Only the room creator can unban participants',
         statusCode: 403,
         success: false,
         status: 'bad',
       };
     }
 
-    // Prevent removing the creator
-    if (targetUserAid === chatroom.creatorAid) {
+    // 2. Premium feature check
+    const permission = await getPermissionsByUserId(requesterAid);
+    if (!permission || !permission.allowedFeatures.includes(FEATURES.BAN_USER)) {
       return {
-        message: 'Cannot remove the room creator',
-        statusCode: 400,
+        message: 'Premium feature: Upgrade to unban participants.',
+        statusCode: 403,
         success: false,
         status: 'bad',
       };
     }
 
-    // Find and mark the participant as left
-    const participant = chatroom.participants.find(p => p.userAid === targetUserAid);
+    // 3. Remove from bans
+    const initialBanCount = chatroom.bans.length;
+    chatroom.bans = chatroom.bans.filter(b => b.userAid !== targetUserAid);
 
-    if (!participant) {
+    if (chatroom.bans.length === initialBanCount) {
       return {
-        message: 'Participant not found in this chatroom',
+        message: 'User is not banned',
         statusCode: 404,
         success: false,
         status: 'bad',
       };
     }
 
-    participant.leftAt = new Date();
     await chatroom.save();
 
-    // Force disconnect the user via WebSocket
-    forceDisconnectClient(chatroomId, targetUserAid, 'removed');
-
-    // Emit events for real-time updates
+    // 4. Emit events for real-time updates
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
-    chatEventEmitter.emit('chatroomListUpdated');
-    
+
     return {
-      message: 'Participant removed successfully',
+      message: 'Participant unbanned successfully',
       statusCode: 200,
       success: true,
       status: 'good',
@@ -86,4 +83,4 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
   }),
 };
 
-export default removeParticipantRoute;
+export default unbanParticipantRoute;

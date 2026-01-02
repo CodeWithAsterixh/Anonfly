@@ -22,6 +22,8 @@ import generateShareLinkRoute from "./routes/chatroom/generateShareLink";
 import validateShareLinkRoute from "./routes/chatroom/validateShareLink";
 import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
 import removeParticipantRoute from "./routes/chatroom/removeParticipant";
+import banParticipantRoute from "./routes/chatroom/banParticipant";
+import unbanParticipantRoute from "./routes/chatroom/unbanParticipant";
 import chatroomSSERoute from "./routes/chatroom/chatroomSSE";
 import challengeRoute from "./routes/auth/challenge";
 import verifyRoute from "./routes/auth/verify";
@@ -118,6 +120,8 @@ router(leaveChatroomRoute);
 router(generateShareLinkRoute);
 router(validateShareLinkRoute);
 router(removeParticipantRoute);
+router(banParticipantRoute);
+router(unbanParticipantRoute);
 
 // Start the server
 const server = app.listen(PORT, () => {

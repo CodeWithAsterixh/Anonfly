@@ -34,6 +34,18 @@ const validateShareLinkRoute: Omit<RouteConfig, 'app'> = {
         return { message: 'Chatroom not found', statusCode: 404, success: false, status: 'bad' };
       }
 
+      // Check if user is banned
+      const isBanned = chatroom.bans?.some(b => b.userAid === userAid);
+      if (isBanned) {
+        return {
+          message: 'You were banned from this room and cannot rejoin.',
+          statusCode: 403,
+          success: false,
+          status: 'bad',
+          reason: 'banned'
+        };
+      }
+
       // If the room has a password, the token MUST contain the correct hashed password
       // For free rooms, the password in the token will be null/undefined
       if (chatroom.isLocked && chatroom.password !== password) {

@@ -47,6 +47,18 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
+    // Check if user is banned
+    const isBanned = chatroom.bans?.some(b => b.userAid === userAid);
+    if (isBanned) {
+      return {
+        message: 'You were banned from this room and cannot rejoin.',
+        statusCode: 403,
+        success: false,
+        status: 'bad',
+        reason: 'banned'
+      };
+    }
+
     // Check if user is already a participant
     const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
 
