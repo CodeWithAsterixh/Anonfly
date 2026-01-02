@@ -7,6 +7,20 @@ import { activeChatrooms } from '../clientManager';
 import { addMessageToCache } from '../../../helpers/messageCache';
 import { verifySignature } from '../../../helpers/crypto';
 import env from '../../../constants/env';
+import { z } from 'zod';
+
+const messageSchema = z.object({
+  chatroomId: z.string().min(1),
+  content: z.string().min(1),
+  signature: z.string().optional(),
+  replyTo: z.object({
+    messageId: z.string(),
+    senderUsername: z.string().optional(),
+    username: z.string().optional(),
+    content: z.string(),
+    userAid: z.string()
+  }).optional()
+});
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
@@ -23,7 +37,15 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
     return;
   }
 
-  const { chatroomId, content, signature, replyTo } = parsedMessage;
+  // Validate message structure
+  const validation = messageSchema.safeParse(parsedMessage);
+  if (!validation.success) {
+    logger.warn(`Invalid message structure from ${wsClient.id}: ${validation.error.message}`);
+    wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid message structure' }));
+    return;
+  }
+
+  const { chatroomId, content, signature, replyTo } = validation.data;
   if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
     logger.warn(`Invalid chatroomId received from ${wsClient.id}: ${chatroomId}`);
     wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid chatroom ID' }));
@@ -62,9 +84,9 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
     reactions: [],
     replyTo: replyTo ? {
       messageId: replyTo.messageId,
-      username: replyTo.senderUsername || replyTo.username,
+      username: replyTo.senderUsername || replyTo.username || "",
       content: replyTo.content,
-      userAid: replyTo.userAid
+      userAid: replyTo.userAid,
     } : undefined
   };
 

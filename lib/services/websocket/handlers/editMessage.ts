@@ -6,6 +6,13 @@ import ChatRoom from '../../../models/chatRoom';
 import { activeChatrooms } from '../clientManager';
 import { updateMessageInCache } from '../../../helpers/messageCache';
 import env from '../../../constants/env';
+import { z } from 'zod';
+
+const editMessageSchema = z.object({
+  chatroomId: z.string().min(1),
+  messageId: z.string().min(1),
+  newContent: z.string().min(1)
+});
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
@@ -21,7 +28,15 @@ export async function handleEditMessage(wsClient: CustomWebSocket, parsedMessage
     return;
   }
 
-  const { chatroomId, messageId, newContent } = parsedMessage;
+  // Validate message structure
+  const validation = editMessageSchema.safeParse(parsedMessage);
+  if (!validation.success) {
+    logger.warn(`Invalid edit message structure from ${wsClient.id}: ${validation.error.message}`);
+    wsClient.send(JSON.stringify({ type: 'error', message: 'Invalid edit message structure' }));
+    return;
+  }
+
+  const { chatroomId, messageId, newContent } = validation.data;
   try {
     const chatroom = await ChatRoom.findById(chatroomId);
     if (chatroom && mongoose.Types.ObjectId.isValid(messageId)) {
