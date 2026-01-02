@@ -4,9 +4,12 @@ import { challengeStore, sessionStore } from '../../../lib/helpers/sessionStore'
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 
+import { validate, verifyIdentitySchema } from '../../../lib/helpers/validation';
+
 const verifyRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/auth/verify',
+  middleware: [validate(verifyIdentitySchema)],
   handler: withErrorHandling(async (event) => {
     const { body } = event;
     const { aid, signature, username, publicKey, exchangePublicKey } = body as {

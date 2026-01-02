@@ -37,7 +37,7 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    if (chatroom.messages[messageIndex].senderAid !== userAid) {
+    if (chatroom.messages[messageIndex].senderAid !== userAid && chatroom.hostAid !== userAid) {
       return {
         message: 'You are not authorized to delete this message',
         statusCode: 403,

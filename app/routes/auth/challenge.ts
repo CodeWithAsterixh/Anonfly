@@ -3,9 +3,12 @@ import { challengeStore } from '../../../lib/helpers/sessionStore';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 
+import { validate, challengeSchema } from '../../../lib/helpers/validation';
+
 const challengeRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/auth/challenge',
+  middleware: [validate(challengeSchema)],
   handler: withErrorHandling(async (event) => {
     const { body } = event;
     const { aid } = body as { aid: string };

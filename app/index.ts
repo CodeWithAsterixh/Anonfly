@@ -44,6 +44,8 @@ import healthzRoute from "./routes/healthzRoute";
 
 import chatEventEmitter from '../lib/helpers/eventEmitter';
 
+import { rateLimiter } from "../lib/middlewares/rateLimiter";
+
 // App setup
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -69,6 +71,9 @@ const httpLogger = pinoHttp({
   customErrorMessage: (req: any, res: any, err?: Error) => `${req.method} ${req.url} failed with ${err?.message}`
 });
 
+// Security: Rate limiting for all routes
+app.use(rateLimiter(100, 60 * 1000)); // 100 requests per minute per IP
+
 // Static files
 app.use(express.static("public")); 
 
@@ -89,8 +94,8 @@ app.use(cors({
 }));
 
 // Body parsers with appropriate limits
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '500kb' }));
+app.use(express.urlencoded({ extended: true, limit: '500kb' }));
 
 
 const router = useRouter(app);
@@ -129,8 +134,15 @@ const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
 });
 
-// WebSocket Server
-const wss = new WebSocketServer({ server });
+// WebSocket Server with security limits
+const wss = new WebSocketServer({ 
+  server,
+  maxPayload: 1024 * 100 // 100KB max message size to prevent DoS
+});
+
+// Connection limits per IP
+const connectionsPerIp = new Map<string, number>();
+const MAX_CONNECTIONS_PER_IP = 5;
 
 interface CustomWebSocket extends WebSocket {
   id: string;
@@ -291,7 +303,18 @@ async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
   }
 }
 
-wss.on('connection', (ws: WebSocket) => {
+wss.on('connection', (ws: WebSocket, req) => {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const currentConns = connectionsPerIp.get(ip) || 0;
+
+  if (currentConns >= MAX_CONNECTIONS_PER_IP) {
+    logger.warn(`Connection rejected: IP ${ip} exceeded limit of ${MAX_CONNECTIONS_PER_IP}`);
+    ws.close(1008, 'Too many connections from this IP');
+    return;
+  }
+
+  connectionsPerIp.set(ip, currentConns + 1);
+
   const customWs = ws as CustomWebSocket;
   customWs.id = uuidv4();
   customWs.isAlive = true;
@@ -299,6 +322,15 @@ wss.on('connection', (ws: WebSocket) => {
   customWs.messageQueue = [];
   clients.set(customWs.id, customWs);
   logger.info(`Client connected: ${customWs.id}. Total clients: ${clients.size}`);
+
+  // Message rate limiting (Leaky bucket)
+  let messageTokens = 10;
+  const MAX_TOKENS = 10;
+  const REFILL_RATE = 1; // 1 token per second
+
+  const refillInterval = setInterval(() => {
+    messageTokens = Math.min(MAX_TOKENS, messageTokens + REFILL_RATE);
+  }, 1000);
 
   customWs.on('pong', () => {
     customWs.isAlive = true;
@@ -911,6 +943,13 @@ wss.on('connection', (ws: WebSocket) => {
   }
 
   customWs.on('message', async message => {
+    // Check message tokens
+    if (messageTokens <= 0) {
+      logger.warn(`Message rate limit exceeded for client ${customWs.id}`);
+      return; // Silently drop or inform client
+    }
+    messageTokens -= 1;
+
     logger.info(`Received message from ${customWs.id}: ${message}`);
     try {
       const parsedMessage = JSON.parse(message.toString());
@@ -922,6 +961,10 @@ wss.on('connection', (ws: WebSocket) => {
   });
 
   customWs.on('close', async () => {
+    const conns = connectionsPerIp.get(ip) || 1;
+    connectionsPerIp.set(ip, conns - 1);
+    clearInterval(refillInterval);
+
     clients.delete(customWs.id);
     if (customWs.chatroomId) {
       await removeClientFromChatroom(customWs.chatroomId, customWs);

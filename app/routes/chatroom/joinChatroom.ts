@@ -5,10 +5,12 @@ import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import bcrypt from 'bcrypt';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 
+import { validate, joinChatroomSchema } from '../../../lib/helpers/validation';
+
 const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/chatrooms/:id/join',
-  middleware: [verifyToken],
+  middleware: [verifyToken, validate(joinChatroomSchema)],
   handler: withErrorHandling(async (event) => {
     const { req, params, body } = event;
     const { id: chatroomId } = params;

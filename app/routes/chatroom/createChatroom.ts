@@ -6,10 +6,13 @@ import chatEventEmitter from '../../../lib/helpers/eventEmitter';
 import bcrypt from 'bcrypt';
 import { getPermissionsByUserId } from '../../../lib/helpers/permissionHelper';
 
+import { validate, chatroomSchema } from '../../../lib/helpers/validation';
+import { rateLimiter } from '../../../lib/middlewares/rateLimiter';
+
 const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/chatrooms',
-  middleware: [verifyToken],
+  middleware: [verifyToken, validate(chatroomSchema), rateLimiter(5, 60 * 60 * 1000)], // Limit to 5 rooms per hour
   handler: withErrorHandling(async (event) => {
     const { body, req } = event;
     const { roomname, description, password, region } = body as { 
