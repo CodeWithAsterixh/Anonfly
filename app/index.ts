@@ -454,13 +454,21 @@ wss.on('connection', (ws: WebSocket) => {
 
         // Filter messages: only show messages from the time they joined (incognito mode)
         const currentParticipant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
-        const joinedAt = currentParticipant?.joinedAt ? new Date(currentParticipant.joinedAt).getTime() : 0;
+        
+        // SECURITY: If for some reason they aren't a participant, don't send any messages
+        if (!currentParticipant) {
+          logger.warn(`Sync blocked: User ${wsClient.userAid} is not a participant in ${parsedMessage.chatroomId}`);
+          wsClient.syncing = false;
+          return;
+        }
+
+        const joinedAt = currentParticipant.joinedAt ? new Date(currentParticipant.joinedAt).getTime() : Date.now();
 
         for (const msg of cachedMessages) {
           const msgTimestamp = new Date(msg.timestamp).getTime();
           
-          // Skip messages sent before the user joined/rejoined
-          if (joinedAt > 0 && msgTimestamp < joinedAt) {
+          // Skip messages sent before the user joined/rejoined (Strict Incognito)
+          if (msgTimestamp < joinedAt) {
             continue;
           }
 

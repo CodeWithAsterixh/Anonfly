@@ -24,12 +24,23 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
 
     const userAid = (req as any).userAid;
     const participant = chatroom.participants.find(p => p.userAid === userAid);
-    const joinedAt = participant?.joinedAt ? new Date(participant.joinedAt).getTime() : 0;
 
-    let messages = chatroom.messages;
-    if (joinedAt > 0) {
-      messages = messages.filter(msg => new Date(msg.timestamp).getTime() >= joinedAt);
+    // SECURITY: If the user is not a participant or has left, they cannot see messages.
+    // If they just joined, joinedAt will be set. If it's missing, default to a future date (see nothing).
+    if (!participant || participant.leftAt) {
+      return {
+        message: 'Access denied: You must be an active participant to view messages.',
+        statusCode: 403,
+        success: false,
+        status: 'bad',
+      };
     }
+
+    const joinedAt = participant.joinedAt ? new Date(participant.joinedAt).getTime() : Date.now();
+
+    const messages = chatroom.messages.filter(msg => 
+      new Date(msg.timestamp).getTime() >= joinedAt
+    );
 
     return {
       statusCode: 200,
