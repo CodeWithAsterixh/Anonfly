@@ -121,7 +121,7 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
   const userAid = (req as any).userAid;
   const userRegion = req.query.region as string;
 
-  console.log(`[SSE] Client connected for chatroom list: ${userAid}`);
+  // console.log(`[SSE] Client connected for chatroom list: ${userAid}`);
 
   // Initial send
   try {
@@ -168,7 +168,7 @@ router.get(['/chatrooms', '/chatrooms/'], verifyToken, async (req, res) => {
 
   // Clean up when connection closes
   req.on('close', () => {
-    console.log(`[SSE] Client disconnected from chatroom list: ${userAid}`);
+    // console.log(`[SSE] Client disconnected from chatroom list: ${userAid}`);
     clearInterval(heartbeatInterval);
     if (updateTimeout) clearTimeout(updateTimeout);
     chatEventEmitter.off('chatroomCreated', sendUpdateDebounced);

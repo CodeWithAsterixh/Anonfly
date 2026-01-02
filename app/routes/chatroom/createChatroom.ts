@@ -10,6 +10,7 @@ import crypto from 'crypto';
 
 import { validate, chatroomSchema } from '../../../lib/helpers/validation';
 import { createRoomLimiter } from '../../../lib/middlewares/rateLimiter';
+import { generateRoomAccessToken } from '../../../lib/helpers/crypto';
 
 const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
@@ -104,12 +105,23 @@ const createChatroomRoute: Omit<RouteConfig, 'app'> = {
       // Emit event that a new chatroom has been created
       chatEventEmitter.emit('chatroomCreated', newChatRoom);
 
+      // Generate token if it's a private room
+      let token;
+      if (newChatRoom.isPrivate) {
+        token = generateRoomAccessToken(newChatRoom._id.toString(), newChatRoom.password);
+      }
+
       return {
         message: 'Chatroom created successfully',
         statusCode: 201,
         success: true,
         status: 'good',
-        data: { id: newChatRoom._id, roomname: newChatRoom.roomname },
+        data: { 
+          id: newChatRoom._id, 
+          roomname: newChatRoom.roomname,
+          isPrivate: newChatRoom.isPrivate,
+          token
+        },
       };
     } catch (error: any) {
       if (error.code === 11000) { // Duplicate key error for unique roomname

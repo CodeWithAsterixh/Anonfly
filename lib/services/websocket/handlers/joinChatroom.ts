@@ -55,9 +55,11 @@ export async function handleJoinChatroom(
   }
 
   const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
+  const isCreator = wsClient.userAid === chatroom.creatorAid;
 
   // Private room access control
-  if (chatroom.isPrivate && !participant) {
+  // Allow if user is creator or already a participant
+  if (chatroom.isPrivate && !isCreator && !participant) {
     if (!linkToken) {
       wsClient.send(JSON.stringify({ 
         type: 'error', 
@@ -113,7 +115,8 @@ export async function handleJoinChatroom(
   }
   
   // Password verification for locked rooms
-  if (chatroom.isLocked && chatroom.password && !participant) {
+  // Allow if user is creator or already a participant
+  if (chatroom.isLocked && chatroom.password && !isCreator && !participant) {
     if (!password) {
       wsClient.send(JSON.stringify({ 
         type: 'error', 

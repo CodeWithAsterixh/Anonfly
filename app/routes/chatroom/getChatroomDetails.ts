@@ -25,9 +25,10 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
       };
     }
 
-    const isParticipant = chatroom.participants.some(p => p.userAid === userAid && !p.leftAt);
+    const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
+    const isCreator = chatroom.creatorAid === userAid;
 
-    if (chatroom.isPrivate && !isParticipant) {
+    if (chatroom.isPrivate && !isParticipant && !isCreator) {
       return {
         message: "This is a private room. Access is restricted.",
         statusCode: 403,
@@ -57,6 +58,7 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
         creatorAid: chatroom.creatorAid,
         isLocked: chatroom.isLocked || false,
         isPrivate: chatroom.isPrivate || false,
+        isAlreadyParticipant: isParticipant,
         participantCount: chatroom.participants.filter(p => !p.leftAt).length,
         allowedFeatures, // Only populated for the host
         participants: chatroom.participants.filter(p => !p.leftAt).map((p) => ({

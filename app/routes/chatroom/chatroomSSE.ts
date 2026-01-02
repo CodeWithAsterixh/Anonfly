@@ -19,7 +19,7 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  console.log(`[SSE] Client connected: ${userAid} for room ${chatroomId}`);
+  // console.log(`[SSE] Client connected: ${userAid} for room ${chatroomId}`);
 
   const sendUpdate = async () => {
     try {
@@ -91,7 +91,7 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
 
   // Clean up when connection closes
   req.on('close', () => {
-    console.log(`[SSE] Client disconnected: ${userAid} for room ${chatroomId}`);
+    // console.log(`[SSE] Client disconnected: ${userAid} for room ${chatroomId}`);
     clearInterval(heartbeatInterval);
     if (updateTimeout) clearTimeout(updateTimeout);
     chatEventEmitter.off(eventName, sendUpdateDebounced);
