@@ -72,7 +72,7 @@ const httpLogger = pinoHttp({
 });
 
 // Security: Rate limiting for all routes
-app.use(rateLimiter(100, 60 * 1000)); // 100 requests per minute per IP
+app.use(rateLimiter()); // Global limit: 100 requests per minute
 
 // Static files
 app.use(express.static("public")); 
