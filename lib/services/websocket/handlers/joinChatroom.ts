@@ -163,14 +163,14 @@ export async function handleJoinChatroom(
 
   addClientToChatroom(chatroomId, wsClient);
   
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const now = new Date();
+  wsClient.joinedAt = now;
 
   if (participant) {
-    // Check if they left more than 1 hour ago
-    if (participant.leftAt && participant.leftAt < oneHourAgo) {
-      logger.info(`User ${wsClient.userAid} rejoined after 1 hour. Resetting joinedAt.`);
-      participant.joinedAt = new Date();
-    }
+    // Always reset joinedAt on every join session
+    logger.info(`User ${wsClient.userAid} joined room ${chatroomId}. Resetting joinedAt for new session.`);
+    participant.joinedAt = now;
+    
     // Update features if changed
     if (allowedFeatures) {
       participant.allowedFeatures = allowedFeatures;
@@ -186,7 +186,7 @@ export async function handleJoinChatroom(
       publicKey: publicKey,
       exchangePublicKey: exchangePublicKey,
       allowedFeatures: allowedFeatures,
-      joinedAt: new Date()
+      joinedAt: now
     });
     // If no host, set as host
     if (!chatroom.hostAid) {
@@ -278,14 +278,13 @@ export async function handleJoinChatroom(
     }
 
     const joinedAt = currentParticipant.joinedAt ? new Date(currentParticipant.joinedAt).getTime() : Date.now();
-    const isCreator = wsClient.userAid === chatroom.creatorAid;
 
     for (const msg of cachedMessages) {
       const msgTimestamp = new Date(msg.timestamp).getTime();
       
       // Skip messages sent before the user joined/rejoined (Strict Incognito)
-      // UNLESS the user is the creator (creator sees all history)
-      if (!isCreator && msgTimestamp < joinedAt) {
+      // All users (including creators/hosts) follow the same visibility rule.
+      if (msgTimestamp < joinedAt) {
         continue;
       }
 

@@ -64,6 +64,7 @@ export async function handleDeleteMessage(wsClient: CustomWebSocket, parsedMessa
           });
         }
 
+        const messageTime = new Date(message.timestamp).getTime();
         const chatroomClients = activeChatrooms.get(chatroomId);
         if (chatroomClients) {
           const deleteBroadcast = JSON.stringify({
@@ -74,6 +75,10 @@ export async function handleDeleteMessage(wsClient: CustomWebSocket, parsedMessa
           });
           chatroomClients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
+              // Only send to clients who joined before this message was originally sent
+              if (client.joinedAt && messageTime < client.joinedAt.getTime()) {
+                return;
+              }
               client.send(deleteBroadcast);
             }
           });

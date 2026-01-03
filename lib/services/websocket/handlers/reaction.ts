@@ -50,13 +50,19 @@ export async function handleReaction(wsClient: CustomWebSocket, parsedMessage: a
 
         const chatroomClients = activeChatrooms.get(chatroomId);
         if (chatroomClients) {
+          const messageTime = new Date(message.timestamp).getTime();
           const reactionBroadcast = JSON.stringify({
-            type: 'reactionUpdate',
+            type: 'reactionUpdated',
             messageId,
             reactions: message.reactions
           });
+
           chatroomClients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
+              // Only send to clients who joined before the message was sent
+              if (client.joinedAt && messageTime < client.joinedAt.getTime()) {
+                return;
+              }
               client.send(reactionBroadcast);
             }
           });

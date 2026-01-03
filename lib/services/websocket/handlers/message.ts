@@ -133,6 +133,11 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
 
     chatroomClients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
+        // Only send to clients who joined before this message was sent
+        if (client.joinedAt && newMessage.timestamp < client.joinedAt) {
+          return;
+        }
+
         if (client.bufferedAmount > 1024 * 1024) {
           logger.warn(`Backpressure: Client ${client.id} buffer is full. Skipping message.`);
           return;

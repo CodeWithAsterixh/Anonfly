@@ -93,6 +93,10 @@ export async function handleEditMessage(wsClient: CustomWebSocket, parsedMessage
           });
           chatroomClients.forEach(client => {
             if (client.readyState === WebSocket.OPEN) {
+              // Only send to clients who joined before this message was originally sent
+              if (client.joinedAt && messageTime < client.joinedAt.getTime()) {
+                return;
+              }
               client.send(editBroadcast);
             }
           });
