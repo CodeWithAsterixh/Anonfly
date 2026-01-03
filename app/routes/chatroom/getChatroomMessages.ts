@@ -23,6 +23,7 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
     }
 
     const userAid = (req as any).userAid;
+    const isCreator = chatroom.creatorAid === userAid;
     const participant = chatroom.participants.find(p => p.userAid === userAid);
 
     // SECURITY: If the user is not a participant or has left, they cannot see messages.
@@ -37,8 +38,7 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
     }
 
     const joinedAt = participant.joinedAt ? new Date(participant.joinedAt).getTime() : Date.now();
-
-    const messages = chatroom.messages.filter(msg => 
+    const messages = isCreator? chatroom.messages:chatroom.messages.filter(msg => 
       new Date(msg.timestamp).getTime() >= joinedAt
     );
 

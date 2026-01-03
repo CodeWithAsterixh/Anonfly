@@ -17,7 +17,6 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     const { id: chatroomId } = params;
     const { password, linkToken, joinAuthToken } = body as { password?: string, linkToken?: string, joinAuthToken?: string };
     const userAid = (req as any)?.userAid;
-    const username = (req as any)?.username;
 
     if (!userAid) {
       return {
