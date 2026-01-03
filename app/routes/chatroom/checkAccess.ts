@@ -61,7 +61,7 @@ const checkAccessRoute: Omit<RouteConfig, 'app'> = {
 
     // 4. Otherwise, for private rooms, access is denied without a valid link
     return {
-      message: "This is a private room. You need a valid invite link to access it.",
+      message: "This is a private room. You need a valid invite link to join.",
       statusCode: 403,
       success: false,
       status: "bad",

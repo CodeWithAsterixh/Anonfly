@@ -18,13 +18,13 @@ const verifyToken = async (req: AuthenticatedRequest, res: pkg.Response, next: p
     }
 
     if (!token || token === 'null' || token === 'undefined') {
-      throw new Error('Authentication failed: No session token provided');
+      throw new Error('Please sign in to access this room.');
     }
 
     const session = await sessionStore.get(token);
 
     if (!session) {
-      throw new Error('Authentication failed: Invalid or expired session');
+      throw new Error('Your session has expired. Please sign in again.');
     }
 
     // Attach session data to request

@@ -64,13 +64,17 @@ export function validateJoinAuthToken(token: string, roomId: string, userAid: st
 /**
  * Generates a signed token for room access.
  */
-export function generateRoomAccessToken(roomId: string, password?: string): string {
+export function generateRoomAccessToken(roomId: string, password?: string): { token: string; expiresAt: number } {
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours expiry
   const payload = JSON.stringify({
     roomId,
     password: password || null,
-    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours expiry
+    expiresAt,
   });
-  return encrypt(payload);
+  return {
+    token: encrypt(payload),
+    expiresAt,
+  };
 }
 
 /**

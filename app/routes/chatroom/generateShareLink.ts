@@ -35,14 +35,14 @@ const generateShareLinkRoute: Omit<RouteConfig, 'app'> = {
     // Generate token containing roomId and potential room password
     // We use the raw password if it exists (for encrypted rooms)
     // For free rooms, we still generate a token for consistency and security
-    const token = generateRoomAccessToken(chatroom._id.toString(), chatroom.password);
+    const { token, expiresAt } = generateRoomAccessToken(chatroom._id.toString(), chatroom.password);
 
     return {
       message: 'Share link generated successfully',
       statusCode: 200,
       success: true,
       status: 'good',
-      data: { token },
+      data: { token, expiresAt },
     };
   }),
 };

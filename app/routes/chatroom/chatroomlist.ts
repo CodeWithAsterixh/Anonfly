@@ -46,15 +46,12 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
     await cacheChatroomList(chatrooms);
   }
 
-  // Fetch private rooms that this user is a participant in or is the host of
+  // Fetch private rooms ONLY if the user is the host
   const privateRooms = await ChatRoom.aggregate([
     {
       $match: {
         isPrivate: true,
-        $or: [
-          { hostAid: userAid },
-          { "participants.userAid": userAid }
-        ]
+        hostAid: userAid
       }
     },
     {
