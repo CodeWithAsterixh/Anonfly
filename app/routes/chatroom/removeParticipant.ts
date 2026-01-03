@@ -3,7 +3,7 @@ import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
-import { forceDisconnectClient } from '../../../lib/services/websocket/clientManager';
+import { forceDisconnectClient, broadcastHostUpdate } from '../../../lib/services/websocket/clientManager';
 
 const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
   method: 'delete',
@@ -68,6 +68,13 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
     }
 
     participant.leftAt = new Date();
+    
+    // If the removed user was the host, transfer host status back to the creator
+    if (chatroom.hostAid === targetUserAid) {
+      chatroom.hostAid = chatroom.creatorAid;
+      broadcastHostUpdate(chatroomId, chatroom.hostAid);
+    }
+
     await chatroom.save();
 
     // Force disconnect the user via WebSocket
@@ -76,6 +83,7 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
     // Emit events for real-time updates
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
     chatEventEmitter.emit('chatroomListUpdated');
+    chatEventEmitter.emit(`userRemoved:${chatroomId}`, { chatroomId, userAid: targetUserAid });
     
     return {
       message: 'Participant removed successfully',

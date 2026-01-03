@@ -49,12 +49,44 @@ export function forceDisconnectClient(chatroomId: string, userAid: string, reaso
             : 'You were removed from the room by the moderator.'
         }));
         
+        // Broadcast that this user has left/removed
+        const leaveNotice = JSON.stringify({
+          type: 'userLeft',
+          chatroomId,
+          userAid: ws.userAid,
+          username: ws.username,
+          timestamp: new Date().toISOString(),
+          isCreator: false // Creators cannot be banned
+        });
+
+        chatroomClients.forEach(client => {
+          if (client.id !== wsId && client.readyState === WebSocket.OPEN) {
+            client.send(leaveNotice);
+          }
+        });
+
         // Remove from room map to stop further messages
         chatroomClients.delete(wsId);
         ws.chatroomId = undefined;
         logger.info(`Force disconnected client ${userAid} from room ${chatroomId} for ${reason}`);
       }
     }
+  }
+}
+
+export function broadcastHostUpdate(chatroomId: string, hostAid: string) {
+  const chatroomClients = activeChatrooms.get(chatroomId);
+  if (chatroomClients) {
+    const hostUpdate = JSON.stringify({
+      type: 'hostUpdated',
+      chatroomId: chatroomId,
+      hostAid: hostAid
+    });
+    chatroomClients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(hostUpdate);
+      }
+    });
   }
 }
 

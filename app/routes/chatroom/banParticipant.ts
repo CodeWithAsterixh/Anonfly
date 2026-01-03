@@ -5,7 +5,7 @@ import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import { FEATURES } from '../../../lib/constants/features';
 import { getPermissionsByUserId } from '../../../lib/helpers/permissionHelper';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
-import { forceDisconnectClient } from '../../../lib/services/websocket/clientManager';
+import { forceDisconnectClient, broadcastHostUpdate } from '../../../lib/services/websocket/clientManager';
 
 const banParticipantRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
@@ -105,6 +105,12 @@ const banParticipantRoute: Omit<RouteConfig, 'app'> = {
       participant.leftAt = new Date();
     }
 
+    // 7.5 If the banned user was the host, transfer host status back to the creator
+    if (chatroom.hostAid === targetUserAid) {
+      chatroom.hostAid = chatroom.creatorAid;
+      broadcastHostUpdate(chatroomId, chatroom.hostAid);
+    }
+
     await chatroom.save();
 
     // 8. Force disconnect the user via WebSocket
@@ -113,6 +119,7 @@ const banParticipantRoute: Omit<RouteConfig, 'app'> = {
     // 9. Emit events for real-time updates
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
     chatEventEmitter.emit('chatroomListUpdated');
+    chatEventEmitter.emit(`userRemoved:${chatroomId}`, { chatroomId, userAid: targetUserAid });
 
     return {
       message: 'Participant banned successfully',
