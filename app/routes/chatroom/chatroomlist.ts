@@ -35,6 +35,7 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
           description: 1,
           region: 1,
           hostAid: 1,
+          creatorAid: 1,
           participants: 1,
           isLocked: 1,
           lastMessage: "$lastMessage.content",
@@ -46,12 +47,23 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
     await cacheChatroomList(chatrooms);
   }
 
-  // Fetch private rooms ONLY if the user is the host
+  // Fetch private rooms ONLY if the user is the host, creator, or a current participant
   const privateRooms = await ChatRoom.aggregate([
     {
       $match: {
         isPrivate: true,
-        hostAid: userAid
+        $or: [
+          { hostAid: userAid },
+          { creatorAid: userAid },
+          { 
+            participants: { 
+              $elemMatch: { 
+                userAid: userAid, 
+                leftAt: { $exists: false } 
+              } 
+            } 
+          }
+        ]
       }
     },
     {
@@ -68,6 +80,7 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
         description: 1,
         region: 1,
         hostAid: 1,
+        creatorAid: 1,
         participants: 1,
         isLocked: 1,
         isPrivate: 1,
@@ -89,6 +102,7 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
       description: room.description,
       region: room.region,
       hostAid: room.hostAid,
+      creatorAid: room.creatorAid,
       participantCount: room.participants.filter((p: IParticipant) => !p.leftAt).length,
       isLocked: room.isLocked || false,
       isPrivate: room.isPrivate || false,

@@ -60,7 +60,7 @@ export function routeHandler<ReturnT>({
       const event = {
         req,
         res,
-        next: () => {},
+        next: () => { },
         params: req.params,
         query: req.query,
         body: req.body,
@@ -80,7 +80,10 @@ export function routeHandler<ReturnT>({
           result.statusCode <= 299
         ) {
           if (Buffer.isBuffer(result) || isStream(result)) {
-            return res.status(result.statusCode || 200).send(result);
+            return res
+              .status(result.statusCode || 200)
+              .type("application/octet-stream")
+              .send(result);
           } else {
             return res.status(result.statusCode || 200).json(result);
           }

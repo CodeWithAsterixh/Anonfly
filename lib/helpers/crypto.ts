@@ -1,36 +1,46 @@
 import * as crypto from 'crypto';
 import env from '../constants/env';
 
-const ENCRYPTION_KEY = crypto.scryptSync(env.JWT_ACCESS_SECRET || 'default-secret', 'salt', 32);
-const ALGORITHM = 'aes-256-cbc';
+const KEY_LENGTH = 32; // 256-bit
+const IV_LENGTH = 12; // 96-bit nonce for GCM
+const TAG_LENGTH = 16; // 128-bit auth tag
+
+// Generate a secure key from your secret
+const ENCRYPTION_KEY = crypto.scryptSync(env.JWT_ACCESS_SECRET as string, env.SALT as string, KEY_LENGTH);
+const ALGORITHM = 'aes-256-gcm';
 
 /**
- * Encrypts a string using AES-256-CBC.
+ * Encrypts text using AES-256-GCM.
  */
 export function encrypt(text: string): string {
-  const iv = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-  let encrypted = cipher.update(text, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return `${iv.toString('hex')}:${encrypted}`;
+
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+
+  // Return IV + authTag + ciphertext as base64
+  return Buffer.concat([iv, authTag, encrypted]).toString('base64');
 }
 
 /**
- * Decrypts a string using AES-256-CBC.
+ * Decrypts text using AES-256-GCM.
  */
 export function decrypt(text: string): string {
-  const [ivHex, encryptedText] = text.split(':');
-  if (!ivHex || !encryptedText) throw new Error('Invalid encrypted text format');
-  const iv = Buffer.from(ivHex, 'hex');
+  const data = Buffer.from(text, 'base64');
+  const iv = data.slice(0, IV_LENGTH);
+  const authTag = data.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
+  const ciphertext = data.slice(IV_LENGTH + TAG_LENGTH);
+
   const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
+  decipher.setAuthTag(authTag);
+
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return decrypted.toString('utf8');
 }
 
 /**
  * Generates a short-lived authorization token for joining a room.
- * This token is issued after a share link is validated.
  */
 export function generateJoinAuthToken(roomId: string, userAid: string): string {
   const payload = JSON.stringify({
@@ -49,7 +59,6 @@ export function validateJoinAuthToken(token: string, roomId: string, userAid: st
   try {
     const decrypted = decrypt(token);
     const payload = JSON.parse(decrypted);
-
     return (
       payload.type === 'join_auth' &&
       payload.roomId === roomId &&
@@ -100,20 +109,12 @@ export function validateRoomAccessToken(token: string): { roomId: string; passwo
 
 /**
  * Verifies an Ed25519 signature.
- * @param message The message that was signed (as a string or Buffer).
- * @param signature The signature (Base64 encoded).
- * @param publicKey The public key (Base64 DER encoded).
- * @returns boolean
  */
 export function verifySignature(message: string | Buffer, signature: string, publicKey: string): boolean {
   try {
     const sigBuffer = Buffer.from(signature, 'base64');
     const keyBuffer = Buffer.from(publicKey, 'base64');
-    
-    // Ed25519 public key in DER format starts with a specific prefix.
-    // If it's just the raw 32-byte key, we might need to handle that.
-    // Assuming it's DER format as exported by SubtleCrypto.
-    
+
     return crypto.verify(
       null,
       Buffer.from(message),

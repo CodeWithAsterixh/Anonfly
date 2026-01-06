@@ -37,9 +37,14 @@ import healthzRoute from "./routes/healthzRoute";
 import { setupWebSocketServer } from '../lib/services/websocket/connectionManager';
 
 import { rateLimiter } from "../lib/middlewares/rateLimiter";
+import helmet from "helmet";
 
 // App setup
 const app = express();
+
+// Enable Helmet
+app.use(helmet());
+
 const PORT = process.env.PORT || 5000;
 
 // Configure structured logger

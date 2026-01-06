@@ -56,7 +56,6 @@ router.get('/chatroom/:chatroomId/details/sse', verifyToken, async (req, res) =>
         res.write(`data: ${JSON.stringify(details)}\n\n`);
       }
     } catch (error) {
-      console.error(`[SSE] Error sending update for room ${chatroomId}:`, error);
     }
   };
 

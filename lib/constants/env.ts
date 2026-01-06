@@ -21,6 +21,7 @@ interface EnvConfig {
   PAYPAL_CLIENT_SECRET:string | undefined;
   PAYPAL_MODE:string | undefined;
   REDIS_URL:string | undefined;
+  SALT:string | undefined;
 }
 
 const env: EnvConfig = {
@@ -44,6 +45,7 @@ const env: EnvConfig = {
   PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET,
   PAYPAL_MODE: process.env.PAYPAL_MODE,
   REDIS_URL: process.env.REDIS_URL,
+  SALT: process.env.SALT,
 };
 
 export default env;
