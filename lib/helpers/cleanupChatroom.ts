@@ -12,6 +12,13 @@ const logger = pino({
   } : undefined
 });
 
+/**
+ * Performs a complete cleanup of a chatroom, including its database record and cached data.
+ * This is typically called when a room is explicitly deleted or becomes permanently inactive.
+ * 
+ * @param {string} chatroomId - The unique ID of the chatroom to clean up.
+ * @returns {Promise<void>}
+ */
 export default async function cleanupChatroom(chatroomId: string) {
   try {
     // Clear Redis cache for chatroom messages

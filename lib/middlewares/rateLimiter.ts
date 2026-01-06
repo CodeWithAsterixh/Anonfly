@@ -11,6 +11,14 @@ import logger from './logger';
  * - Long-lived connections are not penalized for staying open.
  */
 
+/**
+ * Factory function to create a standard rate limiter using express-rate-limit.
+ * This handles HTTP-level protection against brute-force and DoS.
+ * 
+ * @param {number} limit - Maximum number of requests allowed in the window.
+ * @param {number} windowMs - Time window in milliseconds.
+ * @returns {RequestHandler} Express middleware.
+ */
 export const rateLimiter = (limit: number = 100, windowMs: number = 60 * 1000) => {
   return rateLimit({
     windowMs,
@@ -34,8 +42,22 @@ export const rateLimiter = (limit: number = 100, windowMs: number = 60 * 1000) =
   });
 };
 
-// Specialized limiters
-export const createRoomLimiter = rateLimiter(5, 60 * 60 * 1000); // 5 rooms per hour
-export const authLimiter = rateLimiter(10, 5 * 60 * 1000); // 10 auth attempts per 5 mins
-export const premiumCheckLimiter = rateLimiter(10, 2 * 60 * 60 * 1000); // 1 request per 2 hours
-export const messageLimiter = rateLimiter(30, 10 * 1000); // 30 messages per 10 seconds (for HTTP-based message sending)
+/**
+ * Limit room creation to 5 per hour per IP.
+ */
+export const createRoomLimiter = rateLimiter(5, 60 * 60 * 1000);
+
+/**
+ * Limit authentication attempts to 10 per 5 minutes per IP.
+ */
+export const authLimiter = rateLimiter(10, 5 * 60 * 1000);
+
+/**
+ * Limit premium status checks to 10 per 2 hours per IP.
+ */
+export const premiumCheckLimiter = rateLimiter(10, 2 * 60 * 60 * 1000);
+
+/**
+ * Limit HTTP-based message operations to 30 per 10 seconds.
+ */
+export const messageLimiter = rateLimiter(30, 10 * 1000);

@@ -8,6 +8,21 @@ import { getPermissionsByUserId, hasFeature } from '../../../lib/helpers/permiss
 import { validate, verifyIdentitySchema } from '../../../lib/helpers/validation';
 import { authLimiter } from '../../../lib/middlewares/rateLimiter';
 
+/**
+ * Route configuration for verifying a user's identity via cryptographic challenge.
+ * 
+ * POST /auth/verify
+ * 
+ * The second step of the authentication handshake:
+ * 1. Client provides a digital signature of the nonce received from /auth/challenge.
+ * 2. Server verifies the signature using the provided Ed25519 identity public key.
+ * 3. If valid, a session is created and a token is returned.
+ * 4. User's premium features/permissions are retrieved and included in the response.
+ * 
+ * Middleware:
+ * - `authLimiter`: Prevents brute-force signature submission.
+ * - `validate(verifyIdentitySchema)`: Ensures all required cryptographic fields are present.
+ */
 const verifyRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/auth/verify',

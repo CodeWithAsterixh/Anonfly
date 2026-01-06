@@ -8,6 +8,24 @@ import { validateRoomAccessToken, validateJoinAuthToken } from '../../../lib/hel
 
 import { validate, joinChatroomSchema } from '../../../lib/helpers/validation';
 
+/**
+ * Route configuration for joining a chatroom.
+ * 
+ * POST /chatrooms/:id/join
+ * 
+ * This route validates access requirements for a chatroom:
+ * 1. Checks if the user is banned.
+ * 2. Checks if the user is already a participant.
+ * 3. Validates passwords for locked rooms.
+ * 4. Validates invite tokens for private rooms.
+ * 
+ * NOTE: This route does NOT add the user to the `participants` array in the DB.
+ * That is handled by the WebSocket `joinChatroom` handler when the client connects.
+ * 
+ * Middleware:
+ * - `verifyToken`: Ensures user is authenticated.
+ * - `validate(joinChatroomSchema)`: Validates request body (password, tokens).
+ */
 const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/chatrooms/:id/join',

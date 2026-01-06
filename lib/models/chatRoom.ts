@@ -1,6 +1,9 @@
 import { Schema, model, Types, Document } from "mongoose";
 import getDbConnection from "../handlers/getDbConnection";
 
+/**
+ * Schema for message reactions (emojis).
+ */
 const ReactionSchema = new Schema({
   userAid: { type: String, required: true },
   username: { type: String, required: true },
@@ -9,6 +12,9 @@ const ReactionSchema = new Schema({
   emojiType: { type: String, default: 'unicode' },
 }, { _id: false });
 
+/**
+ * Schema for referencing a message that another message is replying to.
+ */
 const ReplyToSchema = new Schema({
   messageId: { type: String, required: true },
   userAid: { type: String, required: true },
@@ -16,6 +22,9 @@ const ReplyToSchema = new Schema({
   content: { type: String, required: true }, // Store content for quick preview without extra lookups
 }, { _id: false });
 
+/**
+ * Interface representing a chat message.
+ */
 export interface IMessage {
   _id: Types.ObjectId; // Add _id for embedded documents
   senderAid: string;
@@ -41,15 +50,27 @@ export interface IMessage {
   };
 }
 
+/**
+ * Interface representing a participant in a chatroom.
+ */
 export interface IParticipant {
+  /** Unique identifier for the user (Anonfly ID) */
   userAid: string;
+  /** Display name of the user */
   username: string;
-  publicKey?: string; // Identity Public Key
-  exchangePublicKey?: string; // Exchange Public Key
+  /** Ed25519 identity public key for signature verification */
+  publicKey?: string;
+  /** X25519 public key for E2EE key exchange */
+  exchangePublicKey?: string;
+  /** List of features allowed for this participant (e.g., 'upload', 'premium') */
   allowedFeatures?: string[];
+  /** Timestamp when the user joined the room */
   joinedAt?: Date;
 }
 
+/**
+ * Interface representing a banned user in a chatroom.
+ */
 export interface IBan {
   userAid: string;
   username: string;
@@ -57,6 +78,9 @@ export interface IBan {
   reason?: string;
 }
 
+/**
+ * Mongoose schema for a chatroom participant.
+ */
 const ParticipantSchema = new Schema<IParticipant>({
   userAid: { type: String, required: true },
   username: { type: String, required: true },
@@ -66,22 +90,41 @@ const ParticipantSchema = new Schema<IParticipant>({
   joinedAt: { type: Date, default: Date.now },
 }, { _id: false });
 
+/**
+ * Interface representing a ChatRoom document in MongoDB.
+ */
 export interface IChatRoom extends Document {
+  /** Display name of the chatroom */
   roomname: string;
+  /** Optional description of the chatroom's purpose */
   description?: string;
-  region?: string; // Add region for location-based sorting
+  /** Geographic region for the chatroom (used for discovery) */
+  region?: string;
+  /** AID of the current room host (responsible for E2EE key distribution) */
   hostAid: string;
+  /** AID of the room creator */
   creatorAid: string;
+  /** List of current active participants */
   participants: IParticipant[];
+  /** Embedded list of messages in this room */
   messages: IMessage[];
+  /** List of banned users */
   bans: IBan[];
-  encryptedRoomKey?: string; // Encrypted for the host
+  /** E2EE room key, encrypted with the host's exchange public key */
+  encryptedRoomKey?: string;
+  /** Initialization vector used for encrypting the room key */
   roomKeyIv?: string;
-  password?: string; // Hashed password
+  /** Hashed password for locked rooms */
+  password?: string;
+  /** Whether the room requires a password to join */
   isLocked: boolean;
+  /** Whether the room is hidden from public listings */
   isPrivate: boolean;
 }
 
+/**
+ * Mongoose schema for the ChatRoom model.
+ */
 const ChatRoomSchema = new Schema<IChatRoom>({
   roomname: { type: String, required: true, unique: true },
   description: { type: String, default: "" },

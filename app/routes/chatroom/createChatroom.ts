@@ -12,6 +12,21 @@ import { validate, chatroomSchema } from '../../../lib/helpers/validation';
 import { createRoomLimiter } from '../../../lib/middlewares/rateLimiter';
 import { generateRoomAccessToken } from '../../../lib/helpers/crypto';
 
+/**
+ * Route configuration for creating a new chatroom.
+ * 
+ * POST /chatrooms
+ * 
+ * This route handles the initialization of a new chatroom.
+ * - Public rooms: Visible to everyone, can be optionally password protected.
+ * - Private rooms: Premium feature. Hidden from public lists, always password protected, 
+ *   and accessible only via invite link.
+ * 
+ * Middleware:
+ * - `verifyToken`: Ensures user is authenticated.
+ * - `validate(chatroomSchema)`: Validates request body.
+ * - `createRoomLimiter`: Rate limits room creation.
+ */
 const createChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/chatrooms',

@@ -14,11 +14,29 @@ const logger = pino({
   } : undefined
 });
 
+/**
+ * Global map of all connected WebSocket clients indexed by their unique connection ID.
+ */
 export const clients = new Map<string, CustomWebSocket>();
+
+/**
+ * Map tracking which clients are in which chatrooms.
+ * Format: chatroomId -> Map<wsConnectionId, CustomWebSocket>
+ */
 export const activeChatrooms = new Map<string, Map<string, CustomWebSocket>>(); // chatroomId -> Map<wsId, CustomWebSocket>
 
+/**
+ * Track scheduled deletion timers for empty chatrooms.
+ */
 const chatroomCleanupTimeouts = new Map<string, NodeJS.Timeout>();
 
+/**
+ * Registers a WebSocket client to a specific chatroom's memory map.
+ * Also clears any pending cleanup timeouts for the room.
+ * 
+ * @param {string} chatroomId - The ID of the chatroom.
+ * @param {CustomWebSocket} ws - The client's WebSocket connection.
+ */
 export function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   if (!activeChatrooms.has(chatroomId)) {
     activeChatrooms.set(chatroomId, new Map<string, CustomWebSocket>());
@@ -36,6 +54,14 @@ export function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   }
 }
 
+/**
+ * Forcefully disconnects a specific user from a chatroom.
+ * Used for moderation actions (kick/ban).
+ * 
+ * @param {string} chatroomId - The chatroom ID.
+ * @param {string} userAid - The AID of the user to disconnect.
+ * @param {'removed' | 'banned'} reason - The reason for disconnection.
+ */
 export function forceDisconnectClient(chatroomId: string, userAid: string, reason: 'removed' | 'banned') {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {
@@ -74,6 +100,12 @@ export function forceDisconnectClient(chatroomId: string, userAid: string, reaso
   }
 }
 
+/**
+ * Broadcasts a host update message to all connected clients in a chatroom.
+ * 
+ * @param {string} chatroomId - The chatroom ID.
+ * @param {string} hostAid - The AID of the new host.
+ */
 export function broadcastHostUpdate(chatroomId: string, hostAid: string) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {
@@ -90,6 +122,13 @@ export function broadcastHostUpdate(chatroomId: string, hostAid: string) {
   }
 }
 
+/**
+ * Removes a client from a chatroom's memory map and updates the database.
+ * Handles host status transfer and schedules room cleanup if the room becomes empty.
+ * 
+ * @param {string} chatroomId - The chatroom ID.
+ * @param {CustomWebSocket} ws - The WebSocket client being removed.
+ */
 export async function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {
@@ -201,6 +240,13 @@ export async function removeClientFromChatroom(chatroomId: string, ws: CustomWeb
   }
 }
 
+/**
+ * Handles an explicit leave request from a user.
+ * Similar to `removeClientFromChatroom` but specifically for intentional departures.
+ * 
+ * @param {string} chatroomId - The ID of the chatroom being left.
+ * @param {CustomWebSocket} ws - The WebSocket client leaving the room.
+ */
 export async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
   try {
     if (!ws.userAid) return;

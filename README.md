@@ -93,10 +93,12 @@ pnpm start
 ```
 
 ## 📂 Project Structure
-- `app/routes/`: API endpoints grouped by feature (auth, chatroom).
-- `lib/helpers/`: Core logic for database connection, crypto, and session storage.
-- `lib/middlewares/`: Express middlewares for security and logging.
-- `lib/models/`: Mongoose schemas for ChatRooms and Messages.
+
+- [app/routes/](file:///c:/Users/Asterixh/Desktop/Anonfly-chat-app/Anonfly/app/routes/README.md): API endpoints grouped by feature (auth, chatroom).
+- [lib/helpers/](file:///c:/Users/Asterixh/Desktop/Anonfly-chat-app/Anonfly/lib/helpers/README.md): Core logic for database connection, crypto, and session storage.
+- [lib/middlewares/](file:///c:/Users/Asterixh/Desktop/Anonfly-chat-app/Anonfly/lib/middlewares/README.md): Express middlewares for security and logging.
+- [lib/models/](file:///c:/Users/Asterixh/Desktop/Anonfly-chat-app/Anonfly/lib/models/README.md): Mongoose schemas for ChatRooms and Messages.
+- [lib/services/websocket/](file:///c:/Users/Asterixh/Desktop/Anonfly-chat-app/Anonfly/lib/services/websocket/README.md): Real-time messaging service.
 
 ---
 Created with ❤️ by **Peter Paul (Asterixh)**

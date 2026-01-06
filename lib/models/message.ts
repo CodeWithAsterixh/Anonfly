@@ -1,13 +1,25 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import getDbConnection from '../handlers/getDbConnection';
 
+/**
+ * Interface representing a standalone Message document.
+ * Note: Messages are primarily stored embedded within ChatRoom documents,
+ * but this model provides a way to query messages independently if needed.
+ */
 export interface IMessage extends Document {
+  /** Reference to the chatroom this message belongs to */
   chatroomId: Types.ObjectId;
+  /** Unique identifier of the sender */
   senderAid: string;
+  /** Display name of the sender at the time of sending */
   senderUsername: string;
-  content: string; // This will now be an encrypted blob
-  signature?: string; // Signature of the encrypted blob
+  /** Encrypted message content (Base64 string) */
+  content: string;
+  /** Ed25519 signature for verifying message integrity and authenticity */
+  signature?: string;
+  /** Timestamp when the message was sent */
   timestamp: Date;
+  /** Reference to a message being replied to */
   replyTo?: {
     messageId: string;
     senderUsername: string;
@@ -15,6 +27,9 @@ export interface IMessage extends Document {
   };
 }
 
+/**
+ * Mongoose schema for the standalone Message model.
+ */
 const MessageSchema: Schema = new Schema({
   chatroomId: { type: Schema.Types.ObjectId, required: true, ref: 'ChatRoom' },
   senderAid: { type: String, required: true },

@@ -14,14 +14,27 @@ const logger = pino({
   } : undefined
 });
 
+/**
+ * Track active connections per IP to prevent DoS attacks.
+ */
 const connectionsPerIp = new Map<string, number>();
+
+/**
+ * Maximum number of concurrent WebSocket connections allowed per single IP address.
+ */
 const MAX_CONNECTIONS_PER_IP = 5;
 
+/**
+ * Initializes the WebSocket server and sets up event listeners for connections.
+ * 
+ * @param {WebSocketServer} wss - The WebSocket server instance.
+ */
 export function setupWebSocketServer(wss: WebSocketServer) {
   wss.on('connection', (ws: WebSocket, req) => {
     const ip = req.socket.remoteAddress || 'unknown';
     const currentConns = connectionsPerIp.get(ip) || 0;
 
+    // IP-based connection limiting
     if (currentConns >= MAX_CONNECTIONS_PER_IP) {
       logger.warn(`Connection rejected: IP ${ip} exceeded limit of ${MAX_CONNECTIONS_PER_IP}`);
       ws.close(1008, 'Too many connections from this IP');
@@ -38,7 +51,7 @@ export function setupWebSocketServer(wss: WebSocketServer) {
     clients.set(customWs.id, customWs);
     logger.info(`Client connected: ${customWs.id}. Total clients: ${clients.size}`);
 
-    // Message rate limiting (Leaky bucket)
+    // Message rate limiting (Leaky bucket algorithm)
     let messageTokens = 10;
     const MAX_TOKENS = 10;
     const REFILL_RATE = 1; // 1 token per second
@@ -53,6 +66,7 @@ export function setupWebSocketServer(wss: WebSocketServer) {
 
     customWs.on('message', async (data: string) => {
       try {
+        // Enforce rate limiting
         if (messageTokens <= 0) {
           logger.warn(`Rate limit exceeded for client: ${customWs.id}`);
           customWs.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded. Please wait.' }));
@@ -74,6 +88,7 @@ export function setupWebSocketServer(wss: WebSocketServer) {
 
       clients.delete(customWs.id);
       if (customWs.chatroomId) {
+        // Handle database cleanup when user disconnects
         await removeClientFromChatroom(customWs.chatroomId, customWs);
       }
       logger.info(`Client disconnected: ${customWs.id}. Total clients: ${clients.size}`);
@@ -84,14 +99,14 @@ export function setupWebSocketServer(wss: WebSocketServer) {
     });
   });
 
-  // Ping clients to keep connections alive
+  // Keep-alive mechanism: Ping clients every 30 seconds
   const pingInterval = setInterval(() => {
     clients.forEach(ws => {
       if (!ws.isAlive) return ws.terminate();
       ws.isAlive = false;
       ws.ping();
     });
-  }, 30000); // Every 30 seconds
+  }, 30000);
 
   wss.on('close', () => {
     clearInterval(pingInterval);

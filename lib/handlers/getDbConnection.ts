@@ -1,11 +1,21 @@
 import mongoose from "mongoose";
 import env from "../constants/env";
 
-const connections:Record<string, any>= {};
+/**
+ * Cache for database connections to prevent multiple connections to the same database.
+ */
+const connections: Record<string, mongoose.Connection> = {};
 
 /**
+ * Returns a Mongoose connection to the primary "Anonfly" database.
+ * Uses a singleton pattern to ensure only one connection is created per process.
  * 
- * @returns {mongoose.Connection}
+ * @returns {mongoose.Connection} The Mongoose connection instance.
+ * @throws {Error} If MONGODB_URI is not defined in the environment.
+ * 
+ * @example
+ * const db = getDbConnection();
+ * const MyModel = db.model('MyModel', mySchema);
  */
 export default function getDbConnection(): mongoose.Connection {
   const dbName = "Anonfly"; // Always connect to the Anonfly database
