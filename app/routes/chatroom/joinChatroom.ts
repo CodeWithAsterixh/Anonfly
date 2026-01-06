@@ -60,7 +60,7 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // Check if user is already a participant
-    const isParticipant = chatroom.participants.some(p => p.userAid === userAid && !p.leftAt);
+    const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
     const isCreator = userAid === chatroom.creatorAid;
     let isTokenValid = false;
 

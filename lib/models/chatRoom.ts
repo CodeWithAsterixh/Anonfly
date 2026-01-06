@@ -48,7 +48,6 @@ export interface IParticipant {
   exchangePublicKey?: string; // Exchange Public Key
   allowedFeatures?: string[];
   joinedAt?: Date;
-  leftAt?: Date; // Timestamp when user left the room
 }
 
 export interface IBan {
@@ -65,7 +64,6 @@ const ParticipantSchema = new Schema<IParticipant>({
   exchangePublicKey: { type: String },
   allowedFeatures: [{ type: String }],
   joinedAt: { type: Date, default: Date.now },
-  leftAt: { type: Date },
 }, { _id: false });
 
 export interface IChatRoom extends Document {

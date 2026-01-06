@@ -88,9 +88,9 @@ const banParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // 5. Find participant to get their username
-    const participant = chatroom.participants.find(p => p.userAid === targetUserAid);
-    const username = participant?.username || 'Unknown User';
+    // 5. Find participant to get their username and remove them
+    const participantIndex = chatroom.participants.findIndex(p => p.userAid === targetUserAid);
+    const username = participantIndex !== -1 ? chatroom.participants[participantIndex].username : 'Unknown User';
 
     // 6. Add to bans
     chatroom.bans.push({
@@ -100,9 +100,9 @@ const banParticipantRoute: Omit<RouteConfig, 'app'> = {
       reason
     });
 
-    // 7. Mark as left if they are in the room
-    if (participant) {
-      participant.leftAt = new Date();
+    // 7. Remove from participants if they are in the room
+    if (participantIndex !== -1) {
+      chatroom.participants.splice(participantIndex, 1);
     }
 
     // 7.5 If the banned user was the host, transfer host status back to the creator

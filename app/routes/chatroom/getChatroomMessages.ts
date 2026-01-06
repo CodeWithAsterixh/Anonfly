@@ -28,7 +28,7 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
 
     // SECURITY: If the user is not a participant or has left, they cannot see messages.
     // If they just joined, joinedAt will be set. If it's missing, default to a future date (see nothing).
-    if (!participant || participant.leftAt) {
+    if (!participant) {
       return {
         message: 'Access denied: You must be an active participant to view messages.',
         statusCode: 403,

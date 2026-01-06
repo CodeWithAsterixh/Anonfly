@@ -43,9 +43,9 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    const participant = chatroom.participants.find(p => p.userAid === userAid);
+    const participantIndex = chatroom.participants.findIndex(p => p.userAid === userAid);
 
-    if (!participant) {
+    if (participantIndex === -1) {
       return {
         message: 'User is not a participant in this chatroom',
         statusCode: 404,
@@ -54,30 +54,24 @@ const leaveChatroomRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // Mark user as left in participants list
-    participant.leftAt = new Date();
-
     // If the leaving user is the host, transfer host status if possible
     if (chatroom.hostAid === userAid) {
-      const remainingParticipants = chatroom.participants.filter(p => !p.leftAt);
+      const remainingParticipants = chatroom.participants.filter((_, index) => index !== participantIndex);
       if (remainingParticipants.length > 0) {
-        // Find participant with the closest timestamp to be the new host
+        // Find participant with the earliest joinedAt to be the new host
         const newHost = remainingParticipants.reduce((prev, curr) => {
-          return (prev.joinedAt && curr.joinedAt && prev.joinedAt.getTime() < curr.joinedAt.getTime()) ? prev : curr;
+          const prevTime = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
+          const currTime = curr.joinedAt ? new Date(curr.joinedAt).getTime() : Infinity;
+          return prevTime < currTime ? prev : curr;
         }, remainingParticipants[0]);
         chatroom.hostAid = newHost.userAid;
       } else {
-        // If no participants left, preserve the room for a while
-        // The background cleanup job or websocket cleanup will handle deletion
-        await chatroom.save();
-        return {
-          message: 'Successfully left chatroom. Room is preserved while empty.',
-          statusCode: 200,
-          success: true,
-          status: 'good',
-        };
+        chatroom.hostAid = ""; 
       }
     }
+
+    // Remove the participant from the list
+    chatroom.participants.splice(participantIndex, 1);
 
     await chatroom.save();
 

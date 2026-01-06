@@ -23,7 +23,7 @@ const checkAccessRoute: Omit<RouteConfig, 'app'> = {
     }
 
     const isCreator = chatroom.creatorAid === userAid;
-    const isParticipant = chatroom.participants.some(p => p.userAid === userAid && !p.leftAt);
+    const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
 
     // 1. If they are already a participant or the creator, access is granted
     if (isCreator || isParticipant) {

@@ -87,7 +87,7 @@ export async function handleJoinChatroom(
   }
 
   const participant = chatroom.participants.find(
-    (p) => p.userAid === wsClient.userAid && !p.leftAt
+    (p) => p.userAid === wsClient.userAid
   );
   const isCreator = wsClient.userAid === chatroom.creatorAid;
   let isTokenValid = false;
@@ -218,8 +218,6 @@ export async function handleJoinChatroom(
     if (allowedFeatures) {
       participant.allowedFeatures = allowedFeatures;
     }
-    // Always clear leftAt when rejoining
-    participant.leftAt = undefined;
     await chatroom.save();
   } else if (wsClient.username && wsClient.userAid) {
     // If not a participant yet, add them
@@ -259,9 +257,8 @@ export async function handleJoinChatroom(
       hostAid: chatroom.hostAid,
       creatorAid: chatroom.creatorAid,
       isCreatorOnline,
-      // Only send participants who are currently online (no leftAt)
+      // Send all participants currently in the room
       participants: chatroom.participants
-        .filter((p) => !p.leftAt)
         .map((p) => ({
           userAid: p.userAid,
           username: p.username,

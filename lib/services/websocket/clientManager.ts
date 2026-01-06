@@ -95,18 +95,18 @@ export async function removeClientFromChatroom(chatroomId: string, ws: CustomWeb
   if (chatroomClients) {
     chatroomClients.delete(ws.id);
     
-    // Mark as left in DB instead of removing immediately
+    // Remove from participants in DB instead of marking with leftAt
     try {
       if (ws.userAid) {
         const chatroom = await ChatRoom.findById(chatroomId);
         if (chatroom) {
-          const participant = chatroom.participants.find(p => p.userAid === ws.userAid);
-          if (participant) {
-            participant.leftAt = new Date();
+          const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
+          if (participantIndex !== -1) {
+            const participant = chatroom.participants[participantIndex];
             
-            // If the disconnected user was the host, transfer host status to the earliest joined participant who hasn't left
+            // If the disconnected user was the host, transfer host status BEFORE removing
             if (chatroom.hostAid === ws.userAid) {
-              const remainingParticipants = chatroom.participants.filter(p => !p.leftAt);
+              const remainingParticipants = chatroom.participants.filter((_, index) => index !== participantIndex);
               if (remainingParticipants.length > 0) {
                 const newHost = remainingParticipants.reduce((prev, curr) => {
                   const prevDate = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
@@ -130,17 +130,23 @@ export async function removeClientFromChatroom(chatroomId: string, ws: CustomWeb
                     }
                   });
                 }
+              } else {
+                // No one left to be host
+                chatroom.hostAid = ""; 
               }
             }
 
+            // Remove the participant from the array
+            chatroom.participants.splice(participantIndex, 1);
+
             await chatroom.save();
             chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
-            logger.info(`Marked participant ${ws.userAid} as left in chatroom ${chatroomId} due to disconnect`);
+            logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} due to disconnect`);
           }
         }
       }
     } catch (err) {
-      logger.error(`Error marking participant as left on disconnect: ${err}`);
+      logger.error(`Error removing participant on disconnect: ${err}`);
     }
 
     if (chatroomClients.size === 0) {
@@ -201,15 +207,12 @@ export async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocke
     const chatroom = await ChatRoom.findById(chatroomId);
     if (!chatroom) return;
 
-    const participant = chatroom.participants.find(p => p.userAid === ws.userAid);
-    if (!participant) return;
-
-    // Mark user as left instead of removing immediately
-    participant.leftAt = new Date();
+    const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
+    if (participantIndex === -1) return;
 
     // If the leaving user is the host, transfer host status if possible to someone online
     if (chatroom.hostAid === ws.userAid) {
-      const remainingParticipants = chatroom.participants.filter(p => !p.leftAt);
+      const remainingParticipants = chatroom.participants.filter((_, index) => index !== participantIndex);
       if (remainingParticipants.length > 0) {
         const newHost = remainingParticipants.reduce((prev, curr) => {
           const prevDate = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
@@ -233,13 +236,18 @@ export async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocke
             }
           });
         }
+      } else {
+        chatroom.hostAid = "";
       }
     }
+
+    // Remove the participant from the array
+    chatroom.participants.splice(participantIndex, 1);
 
     await chatroom.save();
     chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
     chatEventEmitter.emit('chatroomListUpdated');
-    logger.info(`Marked participant ${ws.userAid} as left in chatroom ${chatroomId} in DB (explicit leave)`);
+    logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} in DB (explicit leave)`);
   } catch (err) {
     logger.error(`Error handling explicit leave for participant ${ws.userAid} in chatroom ${chatroomId}: ${err}`);
   }

@@ -58,8 +58,7 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
           { 
             participants: { 
               $elemMatch: { 
-                userAid: userAid, 
-                leftAt: { $exists: false } 
+                userAid: userAid
               } 
             } 
           }
@@ -103,7 +102,7 @@ async function getFormattedChatroomList(userAid: string, userRegion?: string) {
       region: room.region,
       hostAid: room.hostAid,
       creatorAid: room.creatorAid,
-      participantCount: room.participants.filter((p: IParticipant) => !p.leftAt).length,
+      participantCount: room.participants.length,
       isLocked: room.isLocked || false,
       isPrivate: room.isPrivate || false,
       lastMessage: isParticipant ? lastMessageContent : null,

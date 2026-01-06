@@ -55,10 +55,10 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    // Find and mark the participant as left
-    const participant = chatroom.participants.find(p => p.userAid === targetUserAid);
+    // Find and remove the participant
+    const participantIndex = chatroom.participants.findIndex(p => p.userAid === targetUserAid);
 
-    if (!participant) {
+    if (participantIndex === -1) {
       return {
         message: 'Participant not found in this chatroom',
         statusCode: 404,
@@ -67,13 +67,14 @@ const removeParticipantRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    participant.leftAt = new Date();
-    
     // If the removed user was the host, transfer host status back to the creator
     if (chatroom.hostAid === targetUserAid) {
       chatroom.hostAid = chatroom.creatorAid;
       broadcastHostUpdate(chatroomId, chatroom.hostAid);
     }
+
+    // Remove from the array
+    chatroom.participants.splice(participantIndex, 1);
 
     await chatroom.save();
 

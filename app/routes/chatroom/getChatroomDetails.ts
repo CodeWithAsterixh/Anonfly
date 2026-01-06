@@ -59,9 +59,9 @@ const getChatroomDetailsRoute: Omit<RouteConfig, 'app'>  = {
         isLocked: chatroom.isLocked || false,
         isPrivate: chatroom.isPrivate || false,
         isAlreadyParticipant: isParticipant,
-        participantCount: chatroom.participants.filter(p => !p.leftAt).length,
+        participantCount: chatroom.participants.length,
         allowedFeatures, // Only populated for the host
-        participants: chatroom.participants.filter(p => !p.leftAt).map((p) => ({
+        participants: chatroom.participants.map((p) => ({
           userAid: p.userAid,
           username: p.username,
           publicKey: p.publicKey,
