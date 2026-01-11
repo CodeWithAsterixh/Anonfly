@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 jobs:
   ping:
+    permissions: {}
     runs-on: ubuntu-latest
     steps:
       - run: curl -s https://anonfly-server-1.onrender.com
