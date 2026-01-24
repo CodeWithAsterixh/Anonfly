@@ -1,6 +1,6 @@
 import ChatRoom from '../../../lib/models/chatRoom';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
-import type { RouteConfig } from '../../../types/index.d';
+import type { GeneralResponse, RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import bcrypt from 'bcrypt';
 import chatEventEmitter from '../../../lib/helpers/eventEmitter';
@@ -26,6 +26,72 @@ import { validate, joinChatroomSchema } from '../../../lib/helpers/validation';
  * - `verifyToken`: Ensures user is authenticated.
  * - `validate(joinChatroomSchema)`: Validates request body (password, tokens).
  */
+const isUserBanned = (chatroom: any, userAid: string) => {
+  return chatroom.bans?.some((b: any) => b.userAid === userAid);
+};
+
+const validateAccessTokens = async (
+  chatroom: any,
+  userAid: string,
+  linkToken?: string,
+  joinAuthToken?: string
+): Promise<boolean> => {
+  const chatroomId = chatroom._id.toString();
+
+  // 1. Check joinAuthToken
+  if (joinAuthToken) {
+    if (validateJoinAuthToken(joinAuthToken, chatroomId, userAid)) {
+      return true;
+    }
+  }
+
+  // 2. Link token validation
+  if (linkToken) {
+    try {
+      const decoded = validateRoomAccessToken(linkToken);
+      if (decoded.roomId === chatroomId) {
+        const roomPwd = chatroom.password || null;
+        const tokenPwd = decoded.password || null;
+
+        let isMatch = roomPwd === tokenPwd;
+        if (!isMatch && roomPwd && tokenPwd) {
+          isMatch = await bcrypt.compare(tokenPwd, roomPwd).catch(() => false);
+        }
+
+        if (!roomPwd || isMatch) {
+          return true;
+        }
+      }
+    } catch {
+      // Token invalid or expired
+    }
+  }
+  return false;
+};
+
+const verifyLockedRoomPassword = async (chatroom: any, password?: string) => {
+  if (!password) {
+    return {
+      message: 'Password required for this chatroom',
+      statusCode: 403,
+      success: false,
+      status: 'bad' as GeneralResponse['status'],
+      requiresPassword: true
+    };
+  }
+
+  const isMatch = await bcrypt.compare(password, chatroom.password);
+  if (!isMatch) {
+    return {
+      message: 'Incorrect password',
+      statusCode: 403,
+      success: false,
+      status: 'bad' as GeneralResponse['status'],
+    };
+  }
+  return null;
+};
+
 const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
   method: 'post',
   path: '/chatrooms/:id/join',
@@ -66,8 +132,7 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // Check if user is banned
-    const isBanned = chatroom.bans?.some(b => b.userAid === userAid);
-    if (isBanned) {
+    if (isUserBanned(chatroom, userAid)) {
       return {
         message: 'You were banned from this room and cannot rejoin.',
         statusCode: 403,
@@ -78,42 +143,12 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // Check if user is already a participant
-    const isParticipant = chatroom.participants.some(p => p.userAid === userAid);
+    const isParticipant = chatroom.participants.some((p: any) => p.userAid === userAid);
     const isCreator = userAid === chatroom.creatorAid;
+    
     let isTokenValid = false;
-
-    // 1. Check joinAuthToken (short-lived proof from validate-link)
-    if (joinAuthToken && !isCreator && !isParticipant) {
-      if (validateJoinAuthToken(joinAuthToken, chatroomId, userAid)) {
-        isTokenValid = true;
-      }
-    }
-
-    // 2. Link token validation (the long-lived invite link itself)
-    if (!isTokenValid && linkToken && !isCreator && !isParticipant) {
-      try {
-        const decoded = validateRoomAccessToken(linkToken);
-        if (decoded.roomId === chatroomId) {
-          // A match is either direct (both are hashes) or via bcrypt (one is raw, one is hash)
-          const roomPwd = chatroom.password || null;
-          const tokenPwd = decoded.password || null;
-          
-          let isMatch = roomPwd === tokenPwd;
-          if (!isMatch && roomPwd && tokenPwd) {
-            try {
-              isMatch = await bcrypt.compare(tokenPwd, roomPwd);
-            } catch (e) {
-              isMatch = false;
-            }
-          }
-
-          if (!roomPwd || isMatch) {
-            isTokenValid = true;
-          }
-        }
-      } catch (err) {
-        // Token invalid or expired, will fall back to other checks if needed
-      }
+    if (!isCreator && !isParticipant) {
+      isTokenValid = await validateAccessTokens(chatroom, userAid, linkToken, joinAuthToken);
     }
 
     // Private room access control
@@ -139,24 +174,9 @@ const joinChatroomRoute: Omit<RouteConfig, 'app'> = {
     // Password verification for locked rooms
     // Allow if user is creator, already a participant, or has a valid link token
     if (chatroom.isLocked && chatroom.password && !isCreator && !isParticipant && !isTokenValid) {
-      if (!password) {
-        return {
-          message: 'Password required for this chatroom',
-          statusCode: 403,
-          success: false,
-          status: 'bad',
-          requiresPassword: true
-        };
-      }
-
-      const isMatch = await bcrypt.compare(password, chatroom.password);
-      if (!isMatch) {
-        return {
-          message: 'Incorrect password',
-          statusCode: 403,
-          success: false,
-          status: 'bad',
-        };
+      const passwordError = await verifyLockedRoomPassword(chatroom, password);
+      if (passwordError) {
+        return passwordError;
       }
     }
 

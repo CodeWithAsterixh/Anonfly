@@ -112,7 +112,7 @@
     },
     "types/": {
       "files": {
-        "index.d.ts": "Global TypeScript declaration file containing custom types and interfaces used throughout the application (e.g., `Pagination`, `RouteEvent`, `generalResponse`, `RouteConfig`)."
+        "index.d.ts": "Global TypeScript declaration file containing custom types and interfaces used throughout the application (e.g., `Pagination`, `RouteEvent`, `GeneralResponse`, `RouteConfig`)."
       }
     }
   },

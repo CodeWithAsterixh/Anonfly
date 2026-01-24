@@ -25,7 +25,7 @@ interface ErrorHandlingOptions {
   skipProcesses?: Array<'connectionActivity'>;
 }
 
-interface generalResponse {
+interface GeneralResponse {
   message: string;
   statusCode: number;
   success: boolean;
@@ -44,7 +44,7 @@ interface RouteConfig<ReturnT = {}> {
   method: HttpMethod;
   path: string;
   middleware?: RequestHandler[];
-  handler: (event: RouteEvent) => Promise<Partial<generalResponse> & ReturnT>;
+  handler: (event: RouteEvent) => Promise<Partial<GeneralResponse> & ReturnT>;
 }
 
 

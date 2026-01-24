@@ -90,8 +90,10 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
     } : undefined
   };
 
-  chatroom.messages.push(newMessage);
-  await chatroom.save();
+  await ChatRoom.updateOne(
+    { _id: chatroomId },
+    { $push: { messages: newMessage } }
+  );
 
   // Update cache
   addMessageToCache(chatroomId, {

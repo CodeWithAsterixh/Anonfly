@@ -37,7 +37,7 @@ const checkAccessRoute: Omit<RouteConfig, 'app'> = {
     }
 
     // 2. If they have a valid join authorization token (issued via validate-link)
-    if (joinAuthToken && validateJoinAuthToken(joinAuthToken, chatroomId, userAid)) {
+    if (joinAuthToken && validateJoinAuthToken(joinAuthToken, chatroomId as string, userAid)) {
       return {
         message: "Access granted via token",
         statusCode: 200,

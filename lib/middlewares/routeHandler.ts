@@ -3,7 +3,7 @@ import type {
   AppOrRouter,
   HttpMethod,
   RouteConfig,
-  generalResponse
+  GeneralResponse
 } from "../../types";
 
 /**
@@ -69,7 +69,7 @@ export function routeHandler<ReturnT>({
       };
 
       try {
-        const result: Partial<generalResponse> & ReturnT = await handler(event);
+        const result: Partial<GeneralResponse> & ReturnT = await handler(event);
         const action_path = chalk.gray.bold(`${path}`);
         const action_verb = chalk.white.bold(verb.toUpperCase());
         if (res.headersSent) return;

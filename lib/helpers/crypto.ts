@@ -92,7 +92,7 @@ export function validateJoinAuthToken(token: string, roomId: string, userAid: st
       payload.userAid === userAid &&
       payload.expiresAt > Date.now()
     );
-  } catch (err) {
+  } catch {
     return false;
   }
 }
@@ -137,7 +137,7 @@ export function validateRoomAccessToken(token: string): { roomId: string; passwo
       roomId: payload.roomId,
       password: payload.password || undefined,
     };
-  } catch (err) {
+  } catch {
     throw new Error('Invalid or expired token');
   }
 }
@@ -165,7 +165,7 @@ export function verifySignature(message: string | Buffer, signature: string, pub
       },
       sigBuffer
     );
-  } catch (err) {
+  } catch {
     return false;
   }
 }

@@ -1,5 +1,5 @@
 
-import type { ErrorHandlingOptions, generalResponse, RouteEvent } from '../../types/index.d';
+import type { ErrorHandlingOptions, GeneralResponse, RouteEvent } from '../../types/index.d';
 import { normalizeError } from "../helpers/normalizeError";
 import checkHttpConnectivity from "../helpers/ping";
 
@@ -10,13 +10,13 @@ import checkHttpConnectivity from "../helpers/ping";
  *  - Default JSON success or error envelope
  *
  * @template ReturnT
- * @param {(event: RouteEvent) => Promise<Partial<generalResponse> & ReturnT>} handler
+ * @param {(event: RouteEvent) => Promise<Partial<GeneralResponse> & ReturnT>} handler
  * @param {ErrorHandlingOptions} [options={}]
- * @returns {(event: RouteEvent) => Promise<Partial<generalResponse> & ReturnT>}
+ * @returns {(event: RouteEvent) => Promise<Partial<GeneralResponse> & ReturnT>}
  */
-export default function withErrorHandling<ReturnT>(handler: (event: RouteEvent) => Promise<Partial<generalResponse> & ReturnT>, options: ErrorHandlingOptions = {}): (event: RouteEvent) => Promise<Partial<generalResponse> & ReturnT> {
-  return async function (event): Promise<Partial<generalResponse> & ReturnT> {
-    const { res, req } = event;
+export default function withErrorHandling<ReturnT>(handler: (event: RouteEvent) => Promise<Partial<GeneralResponse> & ReturnT>, options: ErrorHandlingOptions = {}): (event: RouteEvent) => Promise<Partial<GeneralResponse> & ReturnT> {
+  return async function (event): Promise<Partial<GeneralResponse> & ReturnT> {
+    const { res } = event;
 
     // 1. Connectivity check
     try {

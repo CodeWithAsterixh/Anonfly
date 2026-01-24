@@ -329,7 +329,7 @@ export async function handleJoinChatroom(
       return;
     }
 
-    const joinedAt = Date.now();
+    const joinedAt = wsClient.joinedAt ? wsClient.joinedAt.getTime() : Date.now();
 
     for (const msg of cachedMessages) {
       const msgTimestamp = new Date(msg.timestamp).getTime();
