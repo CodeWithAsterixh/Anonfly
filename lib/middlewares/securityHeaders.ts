@@ -3,7 +3,6 @@
  * Uses Helmet to add essential security headers to all responses
  */
 import helmet from 'helmet';
-import env from '../constants/env';
 
 // Configure Helmet with appropriate security settings
 const helmetMiddleware = helmet({
