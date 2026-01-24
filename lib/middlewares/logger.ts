@@ -19,7 +19,7 @@ const logger = pino({
   // Add base properties to all logs
   base: {
     env: env.NODE_ENV,
-    service: 'kadian-api'
+    service: 'anonfly-service'
   },
   // Timestamp in ISO format
   timestamp: pino.stdTimeFunctions.isoTime

@@ -3,11 +3,15 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
 import { WebSocketServer } from 'ws';
-import pino from 'pino';
 import { pinoHttp } from 'pino-http';
 import env from "../lib/constants/env";
 import useRouter from "../lib/middlewares/routeHandler";
 import helmetMiddleware from "../lib/middlewares/securityHeaders";
+import loggers from "../lib/middlewares/logger";
+
+// Increase max listeners to prevent warnings from multiple pino instances/connections
+process.setMaxListeners(20);
+
 
 // Routes
 import chatroomListRouter from "./routes/chatroom/chatroomlist";
@@ -47,14 +51,8 @@ app.use(helmet());
 
 const PORT = process.env.PORT || 5000;
 
-// Configure structured logger
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  } : undefined
-});
+// Use centralized logger
+const logger = loggers.app;
 
 // Add logger to request object
 const httpLogger = pinoHttp({

@@ -1,18 +1,11 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import pino from 'pino';
-import env from '../../constants/env';
+import loggers from '../../middlewares/logger';
 import { CustomWebSocket } from '../../types/websocket';
 import { clients, removeClientFromChatroom } from './clientManager';
 import { handleParsedMessage } from './messageHandler';
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  } : undefined
-});
+const logger = loggers.child('websocket');
 
 /**
  * Track active connections per IP to prevent DoS attacks.
