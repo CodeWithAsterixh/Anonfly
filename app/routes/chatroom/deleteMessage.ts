@@ -3,6 +3,7 @@ import { updateMessageInCache } from '../../../lib/helpers/messageCache';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import ChatRoom from '../../../lib/models/chatRoom';
+import Message from '../../../lib/models/message';
 import { activeChatrooms } from '../../../lib/services/websocket/clientManager';
 import type { RouteConfig } from '../../../types/index.d';
 
@@ -25,9 +26,9 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    const messageIndex = chatroom.messages.findIndex(msg => msg._id.toString() === messageId);
+    const message = await Message.findById(messageId);
 
-    if (messageIndex === -1) {
+    if (!message) {
       return {
         message: 'Message not found',
         statusCode: 404,
@@ -36,7 +37,7 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    if (chatroom.messages[messageIndex].senderAid !== userAid && chatroom.hostAid !== userAid) {
+    if (message.senderAid !== userAid && chatroom.hostAid !== userAid) {
       return {
         message: 'You are not authorized to delete this message',
         statusCode: 403,
@@ -45,33 +46,30 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
       };
     }
 
-    chatroom.messages[messageIndex].isDeleted = true;
-    chatroom.messages[messageIndex].content = "[This message was deleted]";
-    chatroom.messages[messageIndex].signature = undefined; // Remove signature for deleted messages
+    message.isDeleted = true;
+    message.content = "[This message was deleted]";
+    message.signature = undefined; // Remove signature for deleted messages
+    await message.save();
 
     // Update replies to this message
-    for (const msg of chatroom.messages) {
-      if (msg.replyTo?.messageId === messageId) {
-        msg.replyTo.content = "[This message was deleted]";
-      }
-    }
-
-    chatroom.markModified('messages');
-    await chatroom.save();
+    await Message.updateMany(
+      { chatroomId: chatroom._id, "replyTo.messageId": messageId },
+      { $set: { "replyTo.content": "[This message was deleted]" } }
+    );
 
     // Update cache for the deleted message
-    const deletedMessage = chatroom.messages[messageIndex];
     await updateMessageInCache(chatroomId, {
-      ...(deletedMessage as any).toObject(),
-      id: deletedMessage._id.toString(),
+      ...message.toObject(),
+      id: message._id.toString(),
       chatroomId: chatroomId,
     });
 
     // Also update cache for any messages that were replies to this message
-    const repliesToUpdate = chatroom.messages.filter(msg => msg.replyTo?.messageId === messageId);
+    // We fetch them to update cache correctly
+    const repliesToUpdate = await Message.find({ chatroomId: chatroom._id, "replyTo.messageId": messageId });
     for (const reply of repliesToUpdate) {
       await updateMessageInCache(chatroomId, {
-        ...(reply as any).toObject(),
+        ...reply.toObject(),
         id: reply._id.toString(),
         chatroomId: chatroomId,
       });

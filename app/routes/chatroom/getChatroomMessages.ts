@@ -1,4 +1,5 @@
 import ChatRoom from '../../../lib/models/chatRoom';
+import Message from '../../../lib/models/message';
 import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
 import type { RouteConfig } from '../../../types/index.d';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
@@ -11,7 +12,7 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
     const { req, params } = event;
     const { chatroomId } = params as { chatroomId: string };
 
-    const chatroom = await ChatRoom.findById(chatroomId).select('messages hostAid participants').lean();
+    const chatroom = await ChatRoom.findById(chatroomId).select('hostAid participants creatorAid').lean();
 
     if (!chatroom) {
       return {
@@ -38,9 +39,13 @@ const getChatroomMessagesRoute: Omit<RouteConfig, 'app'> = {
     }
 
     const joinedAt = participant.joinedAt ? new Date(participant.joinedAt).getTime() : Date.now();
-    const messages = isCreator? chatroom.messages:chatroom.messages.filter(msg => 
-      new Date(msg.timestamp).getTime() >= joinedAt
-    );
+    
+    let query: any = { chatroomId };
+    if (!isCreator) {
+      query.timestamp = { $gte: new Date(joinedAt) };
+    }
+
+    const messages = await Message.find(query).sort({ timestamp: 1 }).lean();
 
     return {
       statusCode: 200,

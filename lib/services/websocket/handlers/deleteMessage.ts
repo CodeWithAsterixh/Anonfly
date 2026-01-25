@@ -2,10 +2,11 @@ import { WebSocket } from 'ws';
 import mongoose from 'mongoose';
 import pino from 'pino';
 import type { CustomWebSocket } from '../../../types/websocket';
-import ChatRoom from '../../../models/chatRoom';
+import Message from '../../../models/message';
 import { activeChatrooms } from '../clientManager';
 import { updateMessageInCache } from '../../../helpers/messageCache';
 import env from '../../../constants/env';
+import ChatRoom from '../../../models/chatRoom';
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
@@ -28,18 +29,17 @@ export async function handleDeleteMessage(wsClient: CustomWebSocket, parsedMessa
       return;
     }
 
-    const messageIndex = chatroom.messages.findIndex(m => (m._id || (m as any).id).toString() === messageId);
-    if (messageIndex === -1) {
+    const message = await Message.findById(messageId);
+    if (!message) {
       return;
     }
 
-    const message = chatroom.messages[messageIndex];
     if (message.senderAid !== wsClient.userAid) {
       wsClient.send(JSON.stringify({ type: 'error', message: 'Unauthorized to delete this message' }));
       return;
     }
 
-    await deleteMessageData(chatroom, messageIndex, messageId);
+    await deleteMessageData(chatroom, message);
     await deleteCacheData(chatroomId, messageId, chatroom);
 
     const messageTime = new Date(message.timestamp).getTime();
@@ -50,20 +50,17 @@ export async function handleDeleteMessage(wsClient: CustomWebSocket, parsedMessa
   }
 }
 
-async function deleteMessageData(chatroom: any, messageIndex: number, messageId: string) {
-  chatroom.messages[messageIndex].content = '[This message was deleted]';
-  chatroom.messages[messageIndex].isDeleted = true;
-  chatroom.messages[messageIndex].signature = undefined;
+async function deleteMessageData(chatroom: any, message: any) {
+  message.content = '[This message was deleted]';
+  message.isDeleted = true;
+  message.signature = undefined;
+  await message.save();
 
   // Update replies
-  for (const element of chatroom.messages) {
-    if (element.replyTo && element.replyTo.messageId.toString() === messageId) {
-      element.replyTo.content = '[This message was deleted]';
-    }
-  }
-
-  chatroom.markModified('messages');
-  await chatroom.save();
+  await Message.updateMany(
+    { chatroomId: chatroom._id, "replyTo.messageId": message._id },
+    { $set: { "replyTo.content": "[This message was deleted]" } }
+  );
 }
 
 async function deleteCacheData(chatroomId: string, messageId: string, chatroom: any) {
@@ -74,7 +71,7 @@ async function deleteCacheData(chatroomId: string, messageId: string, chatroom: 
     signature: undefined
   });
 
-  const repliesToUpdate = chatroom.messages.filter((msg: any) => msg.replyTo && msg.replyTo.messageId.toString() === messageId);
+  const repliesToUpdate = await Message.find({ chatroomId: chatroom._id, "replyTo.messageId": messageId });
   for (const reply of repliesToUpdate) {
     await updateMessageInCache(chatroomId, {
       id: reply._id.toString(),

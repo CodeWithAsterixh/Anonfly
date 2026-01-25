@@ -26,14 +26,14 @@ const ReplyToSchema = new Schema({
  * Interface representing a chat message.
  */
 export interface IMessage {
-  _id: Types.ObjectId; // Add _id for embedded documents
+  _id: Types.ObjectId;
   senderAid: string;
-  senderUsername?: string; // Add username for easier rendering
+  senderUsername?: string;
   content: string;
-  signature?: string; // Add signature for verification
+  signature?: string;
   timestamp: Date;
   isEdited?: boolean;
-  isDeleted?: boolean; // Add isDeleted for soft deletion
+  isDeleted?: boolean;
   replies?: Types.ObjectId[];
   reactions?: {
     userAid: string;
@@ -110,6 +110,8 @@ export interface IChatRoom extends Document {
   messages: IMessage[];
   /** List of banned users */
   bans: IBan[];
+  /** Counter for message sequence IDs */
+  messageSequenceCounter: number;
   /** E2EE room key, encrypted with the host's exchange public key */
   encryptedRoomKey?: string;
   /** Initialization vector used for encrypting the room key */

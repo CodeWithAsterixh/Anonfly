@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import pino from "pino";
 import { CustomWebSocket } from "../../../types/websocket";
 import ChatRoom from "../../../models/chatRoom";
+import Message from "../../../models/message";
 import chatEventEmitter from "../../../helpers/eventEmitter";
 import {
   getCachedMessages,
@@ -22,12 +23,12 @@ import env from "../../../constants/env";
 const logger = pino({
   level: env.NODE_ENV === "production" ? "info" : "debug",
   transport:
-    env.NODE_ENV !== "production"
-      ? {
+    env.NODE_ENV === "production"
+      ? undefined
+      : {
           target: "pino-pretty",
           options: { colorize: true },
-        }
-      : undefined,
+        },
 });
 
 export async function handleJoinChatroom(
@@ -112,7 +113,7 @@ export async function handleJoinChatroom(
         if (!isMatch && roomPwd && tokenPwd) {
           try {
             isMatch = await bcrypt.compare(tokenPwd, roomPwd);
-          } catch (e) {
+          } catch {
             isMatch = false;
           }
         }
@@ -121,7 +122,7 @@ export async function handleJoinChatroom(
           isTokenValid = true;
         }
       }
-    } catch (err) {
+    } catch {
       // Token invalid or expired, will fall back to other checks if needed
       logger.debug(`Invalid link token provided for room ${chatroomId}`);
     }
@@ -248,6 +249,86 @@ export async function handleJoinChatroom(
     (c) => c.userAid === chatroom.creatorAid
   );
 
+  // Prepare cached messages
+  let filteredMessages: any[] = [];
+  try {
+    let cachedMessages = await getCachedMessages(chatroomId);
+
+    // If cache is empty, fetch from MongoDB and populate cache
+    if (cachedMessages.length === 0 && chatroom) {
+      logger.debug(`Cache miss for chatroom ${chatroomId}, fetching from DB`);
+      
+      const dbMessages = await Message.find({ chatroomId })
+        .sort({ timestamp: -1 })
+        .limit(50)
+        .lean();
+      
+      // Reverse to get chronological order (oldest first)
+      const reversedbMessages = dbMessages.reverse();
+      cachedMessages = reversedbMessages.map((msg) => {
+        return {
+          ...msg,
+          id: msg._id.toString(), // Ensure ID is string for consistency
+          chatroomId: chatroomId.toString(),
+        };
+      });
+
+      if (cachedMessages.length > 0) {
+        await cacheMessages(chatroomId, cachedMessages);
+      }
+    }
+
+    // Filter messages: only show messages from the time they joined (incognito mode)
+    const currentParticipant = chatroom.participants.find(
+      (p) => p.userAid === wsClient.userAid
+    );
+    const isCreator = chatroom.creatorAid === currentParticipant?.userAid;
+
+    if (currentParticipant) {
+      const joinedAt = wsClient.joinedAt ? wsClient.joinedAt.getTime() : Date.now();
+
+      for (const msg of cachedMessages) {
+        const msgTimestamp = new Date(msg.timestamp).getTime();
+
+        // Skip messages sent before the user joined/rejoined (Strict Incognito)
+        // All users (including creators/hosts) follow the same visibility rule.
+        if (!isCreator && msgTimestamp < joinedAt) {
+          continue;
+        }
+
+        filteredMessages.push({
+          type: "chatMessage",
+          messageId: msg._id || msg.id,
+          chatroomId: msg.chatroomId,
+          senderAid: msg.senderAid || msg.senderId,
+          senderUsername:
+            msg.senderUsername ||
+            chatroom.participants.find((p) => p.userAid === msg.senderAid)
+              ?.username ||
+            "Anonymous",
+          content: msg.content,
+          signature: msg.signature,
+          timestamp: new Date(msg.timestamp).toISOString(),
+          isEdited: msg.isEdited || false,
+          isDeleted: msg.isDeleted || false,
+          reactions: msg.reactions || [],
+          replyTo: msg.replyTo
+            ? {
+                messageId: msg.replyTo.messageId.toString(),
+                username: msg.replyTo.username,
+                content: msg.replyTo.content,
+                userAid: msg.replyTo.userAid,
+              }
+            : undefined,
+        });
+      }
+    }
+  } catch (err) {
+    logger.error(
+      `Failed to fetch/prepare cached messages for ${wsClient.id}: ${err}`
+    );
+  }
+
   wsClient.send(
     JSON.stringify({
       type: "joinSuccess",
@@ -266,6 +347,7 @@ export async function handleJoinChatroom(
           exchangePublicKey: p.exchangePublicKey,
           allowedFeatures: p.allowedFeatures,
         })),
+      cachedMessages: filteredMessages,
     })
   );
 
@@ -293,85 +375,6 @@ export async function handleJoinChatroom(
     }
   } catch (err) {
     logger.error(`Failed to broadcast userJoined for ${wsClient.id}: ${err}`);
-  }
-
-  // Send cached messages to the newly joined client
-  try {
-    let cachedMessages = await getCachedMessages(chatroomId);
-
-    // If cache is empty, fetch from MongoDB and populate cache
-    if (cachedMessages.length === 0 && chatroom) {
-      logger.debug(`Cache miss for chatroom ${chatroomId}, fetching from DB`);
-      cachedMessages = chatroom.messages.slice(-50).map((msg) => {
-        const plainMsg = (msg as any).toObject ? (msg as any).toObject() : msg;
-        return {
-          ...plainMsg,
-          chatroomId: chatroomId,
-        };
-      });
-
-      if (cachedMessages.length > 0) {
-        await cacheMessages(chatroomId, cachedMessages);
-      }
-    }
-
-    // Filter messages: only show messages from the time they joined (incognito mode)
-    const currentParticipant = chatroom.participants.find(
-      (p) => p.userAid === wsClient.userAid
-    );
-    const isCreator = chatroom.creatorAid === currentParticipant?.userAid;
-
-    if (!currentParticipant) {
-      logger.warn(
-        `Sync blocked: User ${wsClient.userAid} is not a participant in ${chatroomId}`
-      );
-      wsClient.syncing = false;
-      return;
-    }
-
-    const joinedAt = wsClient.joinedAt ? wsClient.joinedAt.getTime() : Date.now();
-
-    for (const msg of cachedMessages) {
-      const msgTimestamp = new Date(msg.timestamp).getTime();
-
-      // Skip messages sent before the user joined/rejoined (Strict Incognito)
-      // All users (including creators/hosts) follow the same visibility rule.
-      if (!isCreator && msgTimestamp < joinedAt) {
-        continue;
-      }
-
-      wsClient.send(
-        JSON.stringify({
-          type: "chatMessage",
-          messageId: msg._id || msg.id,
-          chatroomId: msg.chatroomId,
-          senderAid: msg.senderAid || msg.senderId,
-          senderUsername:
-            msg.senderUsername ||
-            chatroom.participants.find((p) => p.userAid === msg.senderAid)
-              ?.username ||
-            "Anonymous",
-          content: msg.content,
-          signature: msg.signature,
-          timestamp: new Date(msg.timestamp).toISOString(),
-          isEdited: msg.isEdited || false,
-          isDeleted: msg.isDeleted || false,
-          reactions: msg.reactions || [],
-          replyTo: msg.replyTo
-            ? {
-                messageId: msg.replyTo.messageId.toString(),
-                username: msg.replyTo.username,
-                content: msg.replyTo.content,
-                userAid: msg.replyTo.userAid,
-              }
-            : undefined,
-        })
-      );
-    }
-  } catch (err) {
-    logger.error(
-      `Failed to fetch/send cached messages for ${wsClient.id}: ${err}`
-    );
   }
 
   wsClient.syncing = false;

@@ -6,13 +6,14 @@ import ChatRoom from '../../../models/chatRoom';
 import { activeChatrooms } from '../clientManager';
 import { getCachedMessages, cacheMessages } from '../../../helpers/messageCache';
 import env from '../../../constants/env';
+import Message from '../../../models/message';
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
+  transport: env.NODE_ENV === 'production' ? undefined : {
     target: 'pino-pretty',
     options: { colorize: true }
-  } : undefined
+  }
 });
 
 export async function handleReaction(wsClient: CustomWebSocket, parsedMessage: any) {
@@ -27,7 +28,7 @@ export async function handleReaction(wsClient: CustomWebSocket, parsedMessage: a
   try {
     const chatroom = await ChatRoom.findById(chatroomId);
     if (chatroom && mongoose.Types.ObjectId.isValid(messageId)) {
-      const message = chatroom.messages.find(m => (m._id || (m as any).id).toString() === messageId);
+      const message = await Message.findById(messageId);
       if (message) {
         if (!message.reactions) message.reactions = [];
         
@@ -38,8 +39,7 @@ export async function handleReaction(wsClient: CustomWebSocket, parsedMessage: a
           message.reactions.push({ userAid, username, emojiId, emojiValue, emojiType });
         }
         
-        chatroom.markModified('messages');
-        await chatroom.save();
+        await message.save();
         
         const cachedMessages = await getCachedMessages(chatroomId);
         const cachedMsg = cachedMessages.find(m => (m._id || m.id || "").toString() === messageId);

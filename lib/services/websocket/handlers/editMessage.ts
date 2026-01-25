@@ -7,6 +7,7 @@ import { activeChatrooms } from '../clientManager';
 import { updateMessageInCache } from '../../../helpers/messageCache';
 import env from '../../../constants/env';
 import { z } from 'zod';
+import Message from '../../../models/message';
 
 const editMessageSchema = z.object({
   chatroomId: z.string().min(1),
@@ -43,17 +44,16 @@ export async function handleEditMessage(wsClient: CustomWebSocket, parsedMessage
       return;
     }
 
-    const messageIndex = chatroom.messages.findIndex(m => (m._id || (m as any).id).toString() === messageId);
-    if (messageIndex === -1) {
+    const message = await Message.findById(messageId);
+    if (!message) {
       return;
     }
 
-    const message = chatroom.messages[messageIndex];
     if (!validateEditPermissions(wsClient, message)) {
       return;
     }
 
-    await updateMessageData(chatroom, messageIndex, messageId, newContent);
+    await updateMessageData(chatroom, message.sequenceId, messageId, newContent);
     await updateCacheData(chatroomId, messageId, newContent, chatroom);
     
     const messageTime = new Date(message.timestamp).getTime();

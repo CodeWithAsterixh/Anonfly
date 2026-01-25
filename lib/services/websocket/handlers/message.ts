@@ -1,13 +1,14 @@
-import { WebSocket } from 'ws';
 import mongoose from 'mongoose';
 import pino from 'pino';
-import type { CustomWebSocket } from '../../../types/websocket';
-import ChatRoom, { type IMessage } from '../../../models/chatRoom';
-import { activeChatrooms } from '../clientManager';
-import { addMessageToCache } from '../../../helpers/messageCache';
-import { verifySignature } from '../../../helpers/crypto';
-import env from '../../../constants/env';
+import { WebSocket } from 'ws';
 import { z } from 'zod';
+import env from '../../../constants/env';
+import { verifySignature } from '../../../helpers/crypto';
+import { addMessageToCache } from '../../../helpers/messageCache';
+import ChatRoom from '../../../models/chatRoom';
+import Message from '../../../models/message';
+import type { CustomWebSocket } from '../../../types/websocket';
+import { activeChatrooms } from '../clientManager';
 
 const messageSchema = z.object({
   chatroomId: z.string().min(1),
@@ -24,10 +25,10 @@ const messageSchema = z.object({
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
+  transport: env.NODE_ENV === 'production' ? undefined : {
     target: 'pino-pretty',
     options: { colorize: true }
-  } : undefined
+  }
 });
 
 export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: any) {
@@ -62,7 +63,7 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
   // Verify signature if present
   if (signature) {
     const participant = chatroom.participants.find(p => p.userAid === wsClient.userAid);
-    if (participant && participant.publicKey) {
+    if (participant?.publicKey) {
       const isValid = verifySignature(content, signature, participant.publicKey);
       if (!isValid) {
         logger.warn(`Invalid signature from ${wsClient.userAid} in chatroom ${chatroomId}`);
@@ -72,13 +73,28 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
     }
   }
 
-  const newMessage: IMessage = {
-    _id: new mongoose.Types.ObjectId(),
+  // Atomic increment to get unique sequence ID
+  const updatedRoom = await ChatRoom.findOneAndUpdate(
+    { _id: chatroomId },
+    { $inc: { messageSequenceCounter: 1 } },
+    { new: true, select: 'messageSequenceCounter' }
+  );
+
+  if (!updatedRoom) {
+     wsClient.send(JSON.stringify({ type: 'error', message: 'Failed to generate sequence ID' }));
+     return;
+  }
+  
+  const sequenceId = updatedRoom.messageSequenceCounter;
+
+  const newMessage = new Message({
+    chatroomId: chatroomId,
     senderAid: wsClient.userAid,
     senderUsername: wsClient.username || 'Anonymous',
     content,
     signature,
     timestamp: new Date(),
+    sequenceId,
     isEdited: false,
     isDeleted: false,
     reactions: [],
@@ -88,26 +104,29 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
       content: replyTo.content,
       userAid: replyTo.userAid,
     } : undefined
-  };
+  });
 
+  await newMessage.save();
+
+  // Update last message in chatroom
   await ChatRoom.updateOne(
     { _id: chatroomId },
-    { $push: { messages: newMessage } }
+    { 
+      $set: { 
+        lastMessage: {
+          content: newMessage.content,
+          senderUsername: newMessage.senderUsername,
+          timestamp: newMessage.timestamp
+        } 
+      } 
+    }
   );
 
   // Update cache
   addMessageToCache(chatroomId, {
+    ...newMessage.toObject(),
     _id: newMessage._id,
     chatroomId: new mongoose.Types.ObjectId(chatroomId),
-    senderAid: newMessage.senderAid,
-    senderUsername: newMessage.senderUsername,
-    content: newMessage.content,
-    signature,
-    timestamp: newMessage.timestamp,
-    isEdited: false,
-    isDeleted: false,
-    reactions: [],
-    replyTo: newMessage.replyTo
   } as any);
 
   // Broadcast message to everyone in the chatroom
@@ -122,6 +141,7 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
       content,
       signature,
       timestamp: newMessage.timestamp.toISOString(),
+      sequenceId,
       isEdited: false,
       isDeleted: false,
       reactions: [],

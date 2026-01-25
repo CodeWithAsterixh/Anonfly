@@ -1,15 +1,15 @@
-import ChatRoom from '../models/chatRoom';
-import { clearCachedMessages } from './messageCache';
 import pino from 'pino';
 import env from '../constants/env';
-import mongoose from 'mongoose';
+import ChatRoom from '../models/chatRoom';
+import Message from '../models/message';
+import { clearCachedMessages } from './messageCache';
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
+  transport: env.NODE_ENV === 'production' ? undefined : {
     target: 'pino-pretty',
     options: { colorize: true }
-  } : undefined
+  }
 });
 
 /**
@@ -24,7 +24,10 @@ export default async function cleanupChatroom(chatroomId: string) {
     // Clear Redis cache for chatroom messages
     await clearCachedMessages(chatroomId);
 
-    // Delete the chatroom document (this also removes embedded messages)
+    // Delete messages from separate collection
+    await Message.deleteMany({ chatroomId });
+
+    // Delete the chatroom document
     await ChatRoom.deleteOne({ _id: chatroomId });
 
     logger.info(`Chatroom ${chatroomId} cleaned up: cache cleared and chatroom deleted`);
