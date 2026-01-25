@@ -2,17 +2,11 @@ import { CustomWebSocket } from '../../types/websocket';
 import ChatRoom from '../../models/chatRoom';
 import chatEventEmitter from '../../helpers/eventEmitter';
 import cleanupChatroom from '../../helpers/cleanupChatroom';
-import pino from 'pino';
+import loggers from '../../middlewares/logger';
 import env from '../../constants/env';
 import { WebSocket } from 'ws';
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
+const logger = loggers.child('clientManager');
 
 export const clients = new Map<string, CustomWebSocket>();
 export const activeChatrooms = new Map<string, Map<string, CustomWebSocket>>(); 

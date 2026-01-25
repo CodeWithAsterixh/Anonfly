@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import mongoose from 'mongoose';
-import pino from 'pino';
+import loggers from '../../../middlewares/logger';
 import type { CustomWebSocket } from '../../../types/websocket';
 import Message from '../../../models/message';
 import { activeChatrooms } from '../clientManager';
@@ -8,13 +8,7 @@ import { updateMessageInCache } from '../../../helpers/messageCache';
 import env from '../../../constants/env';
 import ChatRoom from '../../../models/chatRoom';
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
+const logger = loggers.child('deleteMessageHandler');
 
 export async function handleDeleteMessage(wsClient: CustomWebSocket, parsedMessage: any) {
   if (!wsClient.userAid || !wsClient.chatroomId) {

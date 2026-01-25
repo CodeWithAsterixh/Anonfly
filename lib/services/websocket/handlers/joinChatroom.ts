@@ -1,35 +1,25 @@
-import { WebSocket } from "ws";
 import bcrypt from "bcrypt";
-import pino from "pino";
-import { CustomWebSocket } from "../../../types/websocket";
-import ChatRoom from "../../../models/chatRoom";
-import Message from "../../../models/message";
+import { WebSocket } from "ws";
+import {
+  validateJoinAuthToken,
+  validateRoomAccessToken,
+} from "../../../helpers/crypto";
 import chatEventEmitter from "../../../helpers/eventEmitter";
 import {
-  getCachedMessages,
   cacheMessages,
+  getCachedMessages,
 } from "../../../helpers/messageCache";
+import loggers from "../../../middlewares/logger";
+import ChatRoom from "../../../models/chatRoom";
+import Message from "../../../models/message";
+import { CustomWebSocket } from "../../../types/websocket";
 import {
   activeChatrooms,
   addClientToChatroom,
   removeClientFromChatroom,
 } from "../clientManager";
-import {
-  validateRoomAccessToken,
-  validateJoinAuthToken,
-} from "../../../helpers/crypto";
-import env from "../../../constants/env";
 
-const logger = pino({
-  level: env.NODE_ENV === "production" ? "info" : "debug",
-  transport:
-    env.NODE_ENV === "production"
-      ? undefined
-      : {
-          target: "pino-pretty",
-          options: { colorize: true },
-        },
-});
+const logger = loggers.child('joinChatroom');
 
 export async function handleJoinChatroom(
   wsClient: CustomWebSocket,

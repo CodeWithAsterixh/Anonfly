@@ -1,20 +1,13 @@
-import { WebSocket } from 'ws';
 import mongoose from 'mongoose';
-import pino from 'pino';
-import type { CustomWebSocket } from '../../../types/websocket';
+import { WebSocket } from 'ws';
+import { cacheMessages, getCachedMessages } from '../../../helpers/messageCache';
+import loggers from '../../../middlewares/logger';
 import ChatRoom from '../../../models/chatRoom';
-import { activeChatrooms } from '../clientManager';
-import { getCachedMessages, cacheMessages } from '../../../helpers/messageCache';
-import env from '../../../constants/env';
 import Message from '../../../models/message';
+import type { CustomWebSocket } from '../../../types/websocket';
+import { activeChatrooms } from '../clientManager';
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
+const logger = loggers.child('reactionHandler');
 
 export async function handleReaction(wsClient: CustomWebSocket, parsedMessage: any) {
   if (!wsClient.userAid || !wsClient.chatroomId) {

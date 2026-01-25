@@ -1,6 +1,5 @@
 import { CustomWebSocket } from '../../types/websocket';
-import pino from 'pino';
-import env from '../../constants/env';
+import loggers from '../../middlewares/logger';
 import { handleJoinChatroom } from './handlers/joinChatroom';
 import { handleTyping } from './handlers/typing';
 import { handleSaveRoomKey } from './handlers/saveRoomKey';
@@ -10,14 +9,53 @@ import { handleReaction } from './handlers/reaction';
 import { handleEditMessage } from './handlers/editMessage';
 import { handleDeleteMessage } from './handlers/deleteMessage';
 import { handleSignal } from './handlers/signal';
+import { handleRotateKey } from './handlers/rotateKey';
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  } : undefined
-});
+const logger = loggers.child({ module: 'messageHandler' });
+
+type MessageHandler = {
+  validate: (msg: any) => boolean;
+  execute: (wsClient: CustomWebSocket, msg: any) => Promise<void> | void;
+};
+
+const handlers: Record<string, MessageHandler> = {
+  joinChatroom: {
+    validate: (msg) => !!(msg.chatroomId && msg.userAid && msg.username),
+    execute: (ws, msg) => handleJoinChatroom(ws, msg, handleParsedMessage),
+  },
+  typing: {
+    validate: (msg) => !!msg.chatroomId,
+    execute: (ws, msg) => handleTyping(ws, msg),
+  },
+  saveRoomKey: {
+    validate: (msg) => !!(msg.chatroomId && msg.encryptedKey),
+    execute: (ws, msg) => handleSaveRoomKey(ws, msg),
+  },
+  leaveChatroom: {
+    validate: (msg) => !!msg.chatroomId,
+    execute: (ws, msg) => handleLeaveChatroom(ws, msg),
+  },
+  message: {
+    validate: (msg) => !!(msg.chatroomId && msg.content),
+    execute: (ws, msg) => handleMessage(ws, msg),
+  },
+  reaction: {
+    validate: (msg) => !!(msg.chatroomId && msg.messageId),
+    execute: (ws, msg) => handleReaction(ws, msg),
+  },
+  editMessage: {
+    validate: (msg) => !!(msg.chatroomId && msg.messageId && msg.newContent),
+    execute: (ws, msg) => handleEditMessage(ws, msg),
+  },
+  deleteMessage: {
+    validate: (msg) => !!(msg.chatroomId && msg.messageId),
+    execute: (ws, msg) => handleDeleteMessage(ws, msg),
+  },
+  rotateKey: {
+    validate: (msg) => !!(msg.chatroomId && msg.keys),
+    execute: (ws, msg) => handleRotateKey(ws, msg),
+  },
+};
 
 export async function handleParsedMessage(wsClient: CustomWebSocket, parsedMessage: any) {
   if (parsedMessage.type === 'ping') {
@@ -27,66 +65,22 @@ export async function handleParsedMessage(wsClient: CustomWebSocket, parsedMessa
 
   // If syncing (server is sending cached messages), queue incoming chat messages
   if (wsClient.syncing) {
-    if (!wsClient.messageQueue) wsClient.messageQueue = [];
+    wsClient.messageQueue ??= [];
     wsClient.messageQueue.push(parsedMessage);
     return;
   }
 
-  switch (parsedMessage.type) {
-    case 'joinChatroom':
-      if (parsedMessage.chatroomId && parsedMessage.userAid && parsedMessage.username) {
-        await handleJoinChatroom(wsClient, parsedMessage, handleParsedMessage);
-      }
-      break;
+  const handler = handlers[parsedMessage.type];
+  if (handler) {
+    if (handler.validate(parsedMessage)) {
+      await handler.execute(wsClient, parsedMessage);
+    }
+    return;
+  }
 
-    case 'typing':
-      if (parsedMessage.chatroomId) {
-        handleTyping(wsClient, parsedMessage);
-      }
-      break;
-
-    case 'saveRoomKey':
-      if (parsedMessage.chatroomId && parsedMessage.encryptedKey) {
-        await handleSaveRoomKey(wsClient, parsedMessage);
-      }
-      break;
-
-    case 'leaveChatroom':
-      if (parsedMessage.chatroomId) {
-        await handleLeaveChatroom(wsClient, parsedMessage);
-      }
-      break;
-
-    case 'message':
-      if (parsedMessage.chatroomId && parsedMessage.content) {
-        await handleMessage(wsClient, parsedMessage);
-      }
-      break;
-
-    case 'reaction':
-      if (parsedMessage.chatroomId && parsedMessage.messageId) {
-        await handleReaction(wsClient, parsedMessage);
-      }
-      break;
-
-    case 'editMessage':
-      if (parsedMessage.chatroomId && parsedMessage.messageId && parsedMessage.newContent) {
-        await handleEditMessage(wsClient, parsedMessage);
-      }
-      break;
-
-    case 'deleteMessage':
-      if (parsedMessage.chatroomId && parsedMessage.messageId) {
-        await handleDeleteMessage(wsClient, parsedMessage);
-      }
-      break;
-
-    default:
-      // Broadcast unknown message types to the chatroom (signaling)
-      const handled = handleSignal(wsClient, parsedMessage);
-      if (!handled) {
-        wsClient.send(JSON.stringify({ type: 'error', message: 'Unknown message type or invalid chatroom' }));
-      }
-      break;
+  // Broadcast unknown message types to the chatroom (signaling)
+  const handled = handleSignal(wsClient, parsedMessage);
+  if (!handled) {
+    wsClient.send(JSON.stringify({ type: 'error', message: 'Unknown message type or invalid chatroom' }));
   }
 }

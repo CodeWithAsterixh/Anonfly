@@ -8,14 +8,19 @@ import env from '../constants/env';
 // Configure logger based on environment
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
+  transport: env.NODE_ENV === 'production' ? undefined : {
     target: 'pino-pretty',
     options: {
       colorize: true,
       translateTime: 'SYS:standard',
       ignore: 'pid,hostname'
     }
-  } : undefined,
+  },
+  // Redact sensitive keys including IP addresses
+  redact: {
+    paths: ['req.headers["x-forwarded-for"]', 'req.connection.remoteAddress', 'req.remoteAddress', 'ip', 'remoteAddress'],
+    remove: true
+  },
   // Add base properties to all logs
   base: {
     env: env.NODE_ENV,

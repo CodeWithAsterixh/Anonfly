@@ -88,6 +88,7 @@ const ParticipantSchema = new Schema<IParticipant>({
   exchangePublicKey: { type: String },
   allowedFeatures: [{ type: String }],
   joinedAt: { type: Date, default: Date.now },
+  encryptedSessionKey: { type: String },
 }, { _id: false });
 
 /**

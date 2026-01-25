@@ -1,15 +1,9 @@
 import { Redis } from 'ioredis';
-import pino from 'pino';
+import loggers from '../middlewares/logger';
 import { LRUCache } from 'lru-cache';
 import env from '../constants/env';
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
+const logger = loggers.child('messageCache');
 
 const redisClient = new Redis(env.REDIS_URL || 'redis://localhost:6379');
 

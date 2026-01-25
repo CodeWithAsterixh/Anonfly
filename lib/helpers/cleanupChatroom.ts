@@ -1,16 +1,10 @@
-import pino from 'pino';
+import loggers from '../middlewares/logger';
 import env from '../constants/env';
 import ChatRoom from '../models/chatRoom';
 import Message from '../models/message';
 import { clearCachedMessages } from './messageCache';
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
+const logger = loggers.child('cleanupChatroom');
 
 /**
  * Performs a complete cleanup of a chatroom, including its database record and cached data.

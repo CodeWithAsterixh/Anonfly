@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import pino from 'pino';
+import loggers from '../../../middlewares/logger';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
 import env from '../../../constants/env';
@@ -23,13 +23,7 @@ const messageSchema = z.object({
   }).optional()
 });
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
+const logger = loggers.child('messageHandler');
 
 export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: any) {
   if (!wsClient.userAid || !wsClient.chatroomId) {

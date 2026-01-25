@@ -1,8 +1,7 @@
-import mongoose from 'mongoose';
+import pino from 'pino';
+import getDbConnection from '../lib/handlers/getDbConnection';
 import ChatRoom from '../lib/models/chatRoom';
 import Message from '../lib/models/message';
-import getDbConnection from '../lib/handlers/getDbConnection';
-import pino from 'pino';
 
 const logger = pino({
   transport: {
@@ -16,7 +15,7 @@ async function migrate() {
 
   try {
     // Ensure connection is open
-    const conn = getDbConnection();
+    getDbConnection();
     // Wait for connection to be ready if needed, or just proceed as models use it.
     
     // We need to use the raw collection for ChatRoom because the schema might strip 'messages' field if we use the model directly 

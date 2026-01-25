@@ -1,13 +1,12 @@
-import { WebSocket } from 'ws';
 import mongoose from 'mongoose';
-import pino from 'pino';
-import type { CustomWebSocket } from '../../../types/websocket';
-import ChatRoom from '../../../models/chatRoom';
-import { activeChatrooms } from '../clientManager';
-import { updateMessageInCache } from '../../../helpers/messageCache';
-import env from '../../../constants/env';
+import { WebSocket } from 'ws';
 import { z } from 'zod';
+import { updateMessageInCache } from '../../../helpers/messageCache';
+import loggers from '../../../middlewares/logger';
+import ChatRoom from '../../../models/chatRoom';
 import Message from '../../../models/message';
+import type { CustomWebSocket } from '../../../types/websocket';
+import { activeChatrooms } from '../clientManager';
 
 const editMessageSchema = z.object({
   chatroomId: z.string().min(1),
@@ -15,13 +14,7 @@ const editMessageSchema = z.object({
   newContent: z.string().min(1)
 });
 
-const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV === 'production' ? undefined : {
-    target: 'pino-pretty',
-    options: { colorize: true }
-  }
-});
+const logger = loggers.child('editMessageHandler');
 
 export async function handleEditMessage(wsClient: CustomWebSocket, parsedMessage: any) {
   if (!wsClient.userAid || !wsClient.chatroomId) {
