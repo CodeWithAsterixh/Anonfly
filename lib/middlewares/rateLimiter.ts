@@ -1,5 +1,8 @@
 import { rateLimit } from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import Redis from 'ioredis';
 import logger from './logger';
+import env from '../constants/env';
 
 /**
  * Standard rate limiter using express-rate-limit.
@@ -10,6 +13,17 @@ import logger from './logger';
  * - For SSE, this only limits the initial request to open the stream.
  * - Long-lived connections are not penalized for staying open.
  */
+
+let redisClient: Redis | undefined;
+
+if (env.REDIS_URL) {
+  try {
+    redisClient = new Redis(env.REDIS_URL);
+    logger.app.info('Rate Limiter: Redis client initialized');
+  } catch (error) {
+    logger.app.error({ err: error }, 'Rate Limiter: Failed to initialize Redis client');
+  }
+}
 
 /**
  * Factory function to create a standard rate limiter using express-rate-limit.
@@ -25,6 +39,10 @@ export const rateLimiter = (limit: number = 100, windowMs: number = 60 * 1000) =
     limit,
     standardHeaders: 'draft-8', // Use standard headers for rate limit info
     legacyHeaders: false,
+    store: redisClient ? new RedisStore({
+      // @ts-ignore - ioredis call signature match
+      sendCommand: (...args: string[]) => redisClient!.call(...args),
+    }) : undefined,
     message: {
       success: false,
       message: 'Too many requests, please try again later.',

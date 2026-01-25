@@ -8,35 +8,16 @@ import { WebSocket } from 'ws';
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
+  transport: env.NODE_ENV === 'production' ? undefined : {
     target: 'pino-pretty',
     options: { colorize: true }
-  } : undefined
+  }
 });
 
-/**
- * Global map of all connected WebSocket clients indexed by their unique connection ID.
- */
 export const clients = new Map<string, CustomWebSocket>();
-
-/**
- * Map tracking which clients are in which chatrooms.
- * Format: chatroomId -> Map<wsConnectionId, CustomWebSocket>
- */
-export const activeChatrooms = new Map<string, Map<string, CustomWebSocket>>(); // chatroomId -> Map<wsId, CustomWebSocket>
-
-/**
- * Track scheduled deletion timers for empty chatrooms.
- */
+export const activeChatrooms = new Map<string, Map<string, CustomWebSocket>>(); 
 const chatroomCleanupTimeouts = new Map<string, NodeJS.Timeout>();
 
-/**
- * Registers a WebSocket client to a specific chatroom's memory map.
- * Also clears any pending cleanup timeouts for the room.
- * 
- * @param {string} chatroomId - The ID of the chatroom.
- * @param {CustomWebSocket} ws - The client's WebSocket connection.
- */
 export function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   if (!activeChatrooms.has(chatroomId)) {
     activeChatrooms.set(chatroomId, new Map<string, CustomWebSocket>());
@@ -45,7 +26,6 @@ export function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   ws.chatroomId = chatroomId;
   logger.info(`Client ${ws.id} added to chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size}`);
 
-  // Clear any pending cleanup timeout for this chatroom
   const existingTimeout = chatroomCleanupTimeouts.get(chatroomId);
   if (existingTimeout) {
     clearTimeout(existingTimeout);
@@ -54,14 +34,6 @@ export function addClientToChatroom(chatroomId: string, ws: CustomWebSocket) {
   }
 }
 
-/**
- * Forcefully disconnects a specific user from a chatroom.
- * Used for moderation actions (kick/ban).
- * 
- * @param {string} chatroomId - The chatroom ID.
- * @param {string} userAid - The AID of the user to disconnect.
- * @param {'removed' | 'banned'} reason - The reason for disconnection.
- */
 export function forceDisconnectClient(chatroomId: string, userAid: string, reason: 'removed' | 'banned') {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {
@@ -75,23 +47,8 @@ export function forceDisconnectClient(chatroomId: string, userAid: string, reaso
             : 'You were removed from the room by the moderator.'
         }));
         
-        // Broadcast that this user has left/removed
-        const leaveNotice = JSON.stringify({
-          type: 'userLeft',
-          chatroomId,
-          userAid: ws.userAid,
-          username: ws.username,
-          timestamp: new Date().toISOString(),
-          isCreator: false // Creators cannot be banned
-        });
+        broadcastUserLeft(chatroomId, ws.userAid, ws.username || 'Unknown', false);
 
-        chatroomClients.forEach(client => {
-          if (client.id !== wsId && client.readyState === WebSocket.OPEN) {
-            client.send(leaveNotice);
-          }
-        });
-
-        // Remove from room map to stop further messages
         chatroomClients.delete(wsId);
         ws.chatroomId = undefined;
         logger.info(`Force disconnected client ${userAid} from room ${chatroomId} for ${reason}`);
@@ -100,12 +57,6 @@ export function forceDisconnectClient(chatroomId: string, userAid: string, reaso
   }
 }
 
-/**
- * Broadcasts a host update message to all connected clients in a chatroom.
- * 
- * @param {string} chatroomId - The chatroom ID.
- * @param {string} hostAid - The AID of the new host.
- */
 export function broadcastHostUpdate(chatroomId: string, hostAid: string) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {
@@ -122,131 +73,135 @@ export function broadcastHostUpdate(chatroomId: string, hostAid: string) {
   }
 }
 
-/**
- * Removes a client from a chatroom's memory map and updates the database.
- * Handles host status transfer and schedules room cleanup if the room becomes empty.
- * 
- * @param {string} chatroomId - The chatroom ID.
- * @param {CustomWebSocket} ws - The WebSocket client being removed.
- */
 export async function removeClientFromChatroom(chatroomId: string, ws: CustomWebSocket) {
   const chatroomClients = activeChatrooms.get(chatroomId);
-  if (chatroomClients) {
-    chatroomClients.delete(ws.id);
-    
-    // Remove from participants in DB instead of marking with leftAt
-    try {
-      if (ws.userAid) {
-        const chatroom = await ChatRoom.findById(chatroomId);
-        if (chatroom) {
-          const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
-          if (participantIndex !== -1) {
-            const participant = chatroom.participants[participantIndex];
-            
-            // If the disconnected user was the host, transfer host status BEFORE removing
-            if (chatroom.hostAid === ws.userAid) {
-              const remainingParticipants = chatroom.participants.filter((_, index) => index !== participantIndex);
-              if (remainingParticipants.length > 0) {
-                const newHost = remainingParticipants.reduce((prev, curr) => {
-                  const prevDate = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
-                  const currDate = curr.joinedAt ? new Date(curr.joinedAt).getTime() : Infinity;
-                  return prevDate < currDate ? prev : curr;
-                }, remainingParticipants[0]);
-                chatroom.hostAid = newHost.userAid;
-                logger.info(`Host status transferred to ${newHost.userAid} in chatroom ${chatroomId} after disconnect`);
+  if (!chatroomClients) return;
 
-                // Broadcast host update
-                const chatroomClients = activeChatrooms.get(chatroomId);
-                if (chatroomClients) {
-                  const hostUpdate = JSON.stringify({
-                    type: 'hostUpdated',
-                    chatroomId: chatroomId,
-                    hostAid: chatroom.hostAid
-                  });
-                  chatroomClients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                      client.send(hostUpdate);
-                    }
-                  });
-                }
-              } else {
-                // No one left to be host
-                chatroom.hostAid = ""; 
-              }
-            }
-
-            // Remove the participant from the array
-            chatroom.participants.splice(participantIndex, 1);
-
-            await chatroom.save();
-            chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
-            logger.info(`Removed participant ${ws.userAid} from chatroom ${chatroomId} due to disconnect`);
-          }
-        }
-      }
-    } catch (err) {
-      logger.error(`Error removing participant on disconnect: ${err}`);
-    }
-
-    if (chatroomClients.size === 0) {
-      activeChatrooms.delete(chatroomId);
-
-      // Start a 24-hour cleanup timer when the last user leaves the memory map
-      const timeout = setTimeout(async () => {
-        try {
-          const chatroom = await ChatRoom.findById(chatroomId);
-          // Only delete if the room is still empty after 24 hours
-          if (chatroom && chatroom.participants.length === 0) {
-            await cleanupChatroom(chatroomId);
-            logger.info(`Chatroom ${chatroomId} deleted after 24 hours of inactivity`);
-          }
-          chatroomCleanupTimeouts.delete(chatroomId);
-        } catch (err) {
-          logger.error(`Error in delayed chatroom cleanup for ${chatroomId}: ${err}`);
-        }
-      }, 24 * 60 * 60 * 1000); // 24 hours
-
-      chatroomCleanupTimeouts.set(chatroomId, timeout);
-      logger.info(`Started 24-hour cleanup timeout for chatroom ${chatroomId}`);
-    }
-    delete ws.chatroomId;
-    logger.info(`Client ${ws.id} removed from chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size || 0}`);
+  chatroomClients.delete(ws.id);
+  
+  if (ws.userAid) {
+    await handleParticipantRemoval(chatroomId, ws.userAid);
   }
 
-  // Notify remaining participants that this user left/disconnected
+  if (chatroomClients.size === 0) {
+    handleEmptyChatroom(chatroomId);
+  }
+  
+  delete ws.chatroomId;
+  logger.info(`Client ${ws.id} removed from chatroom ${chatroomId}. Total clients in room: ${activeChatrooms.get(chatroomId)?.size || 0}`);
+
+  if (ws.userAid) {
+    await broadcastUserLeftWithCreatorCheck(chatroomId, ws.userAid, ws.username || 'Unknown', ws.id);
+  }
+}
+
+async function handleParticipantRemoval(chatroomId: string, userAid: string) {
+  try {
+    const chatroom = await ChatRoom.findById(chatroomId);
+    if (!chatroom) return;
+
+    const participantIndex = chatroom.participants.findIndex(p => p.userAid === userAid);
+    if (participantIndex !== -1) {
+      if (chatroom.hostAid === userAid) {
+        transferHostStatus(chatroom, userAid, participantIndex);
+      }
+
+      chatroom.participants.splice(participantIndex, 1);
+      await chatroom.save();
+      chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
+      logger.info(`Removed participant ${userAid} from chatroom ${chatroomId} due to disconnect`);
+    }
+  } catch (err) {
+    logger.error(`Error removing participant on disconnect: ${err}`);
+  }
+}
+
+function transferHostStatus(chatroom: any, oldHostAid: string, participantIndex: number) {
+  const remainingParticipants = chatroom.participants.filter((_: any, index: number) => index !== participantIndex);
+  
+  if (remainingParticipants.length > 0) {
+    const newHost = remainingParticipants.reduce((prev: any, curr: any) => {
+      const prevDate = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
+      const currDate = curr.joinedAt ? new Date(curr.joinedAt).getTime() : Infinity;
+      return prevDate < currDate ? prev : curr;
+    }, remainingParticipants[0]);
+    
+    chatroom.hostAid = newHost.userAid;
+    logger.info(`Host status transferred to ${newHost.userAid} in chatroom ${chatroom._id} after disconnect`);
+    
+    broadcastHostUpdate(chatroom._id.toString(), chatroom.hostAid);
+  } else {
+    chatroom.hostAid = ""; 
+  }
+}
+
+function handleEmptyChatroom(chatroomId: string) {
+  activeChatrooms.delete(chatroomId);
+  const timeout = setTimeout(async () => {
+    try {
+      const chatroom = await ChatRoom.findById(chatroomId);
+      if (chatroom && chatroom.participants.length === 0) {
+        await cleanupChatroom(chatroomId);
+        logger.info(`Chatroom ${chatroomId} deleted after 24 hours of inactivity`);
+      }
+      chatroomCleanupTimeouts.delete(chatroomId);
+    } catch (err) {
+      logger.error(`Error in delayed chatroom cleanup for ${chatroomId}: ${err}`);
+    }
+  }, 24 * 60 * 60 * 1000); 
+
+  chatroomCleanupTimeouts.set(chatroomId, timeout);
+  logger.info(`Started 24-hour cleanup timeout for chatroom ${chatroomId}`);
+}
+
+async function broadcastUserLeftWithCreatorCheck(chatroomId: string, userAid: string, username: string, excludeWsId: string) {
   try {
     const remaining = activeChatrooms.get(chatroomId);
-    if (remaining && ws.userAid) {
+    if (remaining) {
       const chatroom = await ChatRoom.findById(chatroomId);
-      const isCreatorLeaving = chatroom?.creatorAid === ws.userAid;
+      const isCreatorLeaving = chatroom?.creatorAid === userAid;
       
       const leaveNotice = JSON.stringify({
         type: 'userLeft',
         chatroomId,
-        userAid: ws.userAid,
-        username: ws.username,
+        userAid,
+        username,
         timestamp: new Date().toISOString(),
         isCreator: isCreatorLeaving
       });
+      
       remaining.forEach(client => {
-        if (client.id === ws.id) return; // safety: skip the leaving client
+        if (client.id === excludeWsId) return; 
         if (client.readyState === WebSocket.OPEN) {
           client.send(leaveNotice);
         }
       });
     }
   } catch (err) {
-    logger.error(`Failed to broadcast userLeft for ${ws.id}: ${err}`);
+    logger.error(`Failed to broadcast userLeft for ${userAid}: ${err}`);
   }
 }
 
-/**
- * Handles an explicit leave request from a user.
- * Similar to `removeClientFromChatroom` but specifically for intentional departures.
- * 
- * @param {string} chatroomId - The ID of the chatroom being left.
- * @param {CustomWebSocket} ws - The WebSocket client leaving the room.
- */
+function broadcastUserLeft(chatroomId: string, userAid: string, username: string, isCreator: boolean) {
+    const chatroomClients = activeChatrooms.get(chatroomId);
+    if (!chatroomClients) return;
+    
+    const leaveNotice = JSON.stringify({
+      type: 'userLeft',
+      chatroomId,
+      userAid,
+      username,
+      timestamp: new Date().toISOString(),
+      isCreator
+    });
+
+    chatroomClients.forEach(client => {
+      if (client.userAid !== userAid && client.readyState === WebSocket.OPEN) {
+        client.send(leaveNotice);
+      }
+    });
+}
+
 export async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocket) {
   try {
     if (!ws.userAid) return;
@@ -256,38 +211,10 @@ export async function handleExplicitLeave(chatroomId: string, ws: CustomWebSocke
     const participantIndex = chatroom.participants.findIndex(p => p.userAid === ws.userAid);
     if (participantIndex === -1) return;
 
-    // If the leaving user is the host, transfer host status if possible to someone online
     if (chatroom.hostAid === ws.userAid) {
-      const remainingParticipants = chatroom.participants.filter((_, index) => index !== participantIndex);
-      if (remainingParticipants.length > 0) {
-        const newHost = remainingParticipants.reduce((prev, curr) => {
-          const prevDate = prev.joinedAt ? new Date(prev.joinedAt).getTime() : Infinity;
-          const currDate = curr.joinedAt ? new Date(curr.joinedAt).getTime() : Infinity;
-          return prevDate < currDate ? prev : curr;
-        }, remainingParticipants[0]);
-        chatroom.hostAid = newHost.userAid;
-        logger.info(`Host status transferred to ${newHost.userAid} in chatroom ${chatroomId} (explicit leave)`);
-
-        // Broadcast host update
-        const chatroomClients = activeChatrooms.get(chatroomId);
-        if (chatroomClients) {
-          const hostUpdate = JSON.stringify({
-            type: 'hostUpdated',
-            chatroomId: chatroomId,
-            hostAid: chatroom.hostAid
-          });
-          chatroomClients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(hostUpdate);
-            }
-          });
-        }
-      } else {
-        chatroom.hostAid = "";
-      }
+      transferHostStatus(chatroom, ws.userAid, participantIndex);
     }
 
-    // Remove the participant from the array
     chatroom.participants.splice(participantIndex, 1);
 
     await chatroom.save();

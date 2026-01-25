@@ -1,50 +1,52 @@
 // Core express dependencies
-import bodyParser from "body-parser";
 import cors from "cors";
 import express from "express";
-import { WebSocketServer } from 'ws';
 import { pinoHttp } from 'pino-http';
+import { WebSocketServer } from 'ws';
 import env from "../lib/constants/env";
+import loggers from "../lib/middlewares/logger";
 import useRouter from "../lib/middlewares/routeHandler";
 import helmetMiddleware from "../lib/middlewares/securityHeaders";
-import loggers from "../lib/middlewares/logger";
 
 // Increase max listeners to prevent warnings from multiple pino instances/connections
 process.setMaxListeners(20);
 
 
 // Routes
+import challengeRoute from "./routes/auth/challenge";
+import getMyModerationTokenRoute from "./routes/auth/getModerationToken";
+import premiumRoute from "./routes/auth/premium";
+import verifyRoute from "./routes/auth/verify";
+import banParticipantRoute from "./routes/chatroom/banParticipant";
 import chatroomListRouter from "./routes/chatroom/chatroomlist";
+import chatroomSSERoute from "./routes/chatroom/chatroomSSE";
+import checkAccessRoute from "./routes/chatroom/checkAccess";
 import createChatroomRoute from "./routes/chatroom/createChatroom";
+import deleteChatroomRoute from "./routes/chatroom/deleteChatroom";
+import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
+import editChatroomRoute from "./routes/chatroom/editChatroom";
+import generateShareLinkRoute from "./routes/chatroom/generateShareLink";
+import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
 import getChatroomMessagesRoute from "./routes/chatroom/getChatroomMessages";
 import joinChatroomRoute from "./routes/chatroom/joinChatroom";
-import deleteChatroomRoute from "./routes/chatroom/deleteChatroom";
-import getChatroomDetailsRoute from "./routes/chatroom/getChatroomDetails";
-import editChatroomRoute from "./routes/chatroom/editChatroom";
 import leaveChatroomRoute from "./routes/chatroom/leaveChatroom";
-import generateShareLinkRoute from "./routes/chatroom/generateShareLink";
-import validateShareLinkRoute from "./routes/chatroom/validateShareLink";
-import checkAccessRoute from "./routes/chatroom/checkAccess";
-import deleteMessageRoute from "./routes/chatroom/deleteMessage"; // Import the new route
 import removeParticipantRoute from "./routes/chatroom/removeParticipant";
-import banParticipantRoute from "./routes/chatroom/banParticipant";
 import unbanParticipantRoute from "./routes/chatroom/unbanParticipant";
-import chatroomSSERoute from "./routes/chatroom/chatroomSSE";
-import challengeRoute from "./routes/auth/challenge";
-import verifyRoute from "./routes/auth/verify";
-import premiumRoute from "./routes/auth/premium";
-import getMyModerationTokenRoute from "./routes/auth/getModerationToken";
+import validateShareLinkRoute from "./routes/chatroom/validateShareLink";
 
-import homeRoute from "./routes/homeRoute";
 import healthzRoute from "./routes/healthzRoute";
+import homeRoute from "./routes/homeRoute";
 
 import { setupWebSocketServer } from '../lib/services/websocket/connectionManager';
 
-import { rateLimiter } from "../lib/middlewares/rateLimiter";
 import helmet from "helmet";
+import { rateLimiter } from "../lib/middlewares/rateLimiter";
 
 // App setup
 const app = express();
+
+// Trust proxy for rate limiting behind load balancers/proxies
+app.set('trust proxy', 1);
 
 // Enable Helmet
 app.use(helmet());
@@ -76,10 +78,11 @@ app.use(express.static("public"));
 app.use(helmetMiddleware);
 app.use(httpLogger);
 
+const prodAllowedDomain = env.ALLOWEDDOMAIN ? env.ALLOWEDDOMAIN.split(",").map(o => o.trim()) : []
 // CORS configuration with strict options
 app.use(cors({
   origin: env.NODE_ENV === 'production' 
-    ? (env.ALLOWEDDOMAIN ? env.ALLOWEDDOMAIN.split(",").map(o => o.trim()) : [])
+    ? (prodAllowedDomain)
     : ['http://localhost:8000', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
   credentials: true,
   optionsSuccessStatus: 200,

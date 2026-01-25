@@ -5,10 +5,10 @@ import env from '../constants/env';
 
 const logger = pino({
   level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: env.NODE_ENV !== 'production' ? {
+  transport: env.NODE_ENV === 'production' ? undefined : {
     target: 'pino-pretty',
     options: { colorize: true }
-  } : undefined
+  }
 });
 
 const redisClient = new Redis(env.REDIS_URL || 'redis://localhost:6379');

@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import { Document, Schema, Types } from 'mongoose';
 import getDbConnection from '../handlers/getDbConnection';
 
 /**

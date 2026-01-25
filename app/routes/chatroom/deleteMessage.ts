@@ -1,10 +1,10 @@
 import { WebSocket } from 'ws';
-import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
-import type { RouteConfig } from '../../../types/index.d';
-import ChatRoom from '../../../lib/models/chatRoom';
+import { updateMessageInCache } from '../../../lib/helpers/messageCache';
 import { verifyToken } from '../../../lib/middlewares/verifyToken';
-import { removeMessageFromCache, updateMessageInCache } from '../../../lib/helpers/messageCache';
+import withErrorHandling from '../../../lib/middlewares/withErrorHandling';
+import ChatRoom from '../../../lib/models/chatRoom';
 import { activeChatrooms } from '../../../lib/services/websocket/clientManager';
+import type { RouteConfig } from '../../../types/index.d';
 
 const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
   method: 'delete',
@@ -16,7 +16,6 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
     const userAid = (req as any).userAid;
 
     const chatroom = await ChatRoom.findById(chatroomId);
-
     if (!chatroom) {
       return {
         message: 'Chatroom not found',
@@ -52,7 +51,7 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
 
     // Update replies to this message
     for (const msg of chatroom.messages) {
-      if (msg.replyTo && msg.replyTo.messageId === messageId) {
+      if (msg.replyTo?.messageId === messageId) {
         msg.replyTo.content = "[This message was deleted]";
       }
     }
@@ -69,7 +68,7 @@ const deleteMessageRoute: Omit<RouteConfig, 'app'> = {
     });
 
     // Also update cache for any messages that were replies to this message
-    const repliesToUpdate = chatroom.messages.filter(msg => msg.replyTo && msg.replyTo.messageId === messageId);
+    const repliesToUpdate = chatroom.messages.filter(msg => msg.replyTo?.messageId === messageId);
     for (const reply of repliesToUpdate) {
       await updateMessageInCache(chatroomId, {
         ...(reply as any).toObject(),
