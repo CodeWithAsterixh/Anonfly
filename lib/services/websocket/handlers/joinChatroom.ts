@@ -43,11 +43,6 @@ export async function handleJoinChatroom(
     chatroomId,
     userAid,
     username,
-    password,
-    linkToken,
-    joinAuthToken, // Add this
-    publicKey,
-    exchangePublicKey,
     allowedFeatures,
   } = parsedMessage;
 
@@ -64,13 +59,49 @@ export async function handleJoinChatroom(
   wsClient.username = username;
   wsClient.allowedFeatures = allowedFeatures;
 
+  try {
+    const chatroom = await checkChatroomAndBan(wsClient, chatroomId);
+    if (!chatroom) {
+      wsClient.syncing = false;
+      return;
+    }
+
+    const hasAccess = await validateRoomAccess(wsClient, chatroom, parsedMessage);
+    if (!hasAccess) {
+      wsClient.syncing = false;
+      return;
+    }
+
+    await updateParticipantStatus(wsClient, chatroom, parsedMessage);
+
+    // Check if creator is online
+    const chatroomClients = activeChatrooms.get(chatroomId);
+    const isCreatorOnline = Array.from(chatroomClients?.values() || []).some(
+      (c) => c.userAid === chatroom.creatorAid
+    );
+
+    const filteredMessages = await fetchAndFilterMessages(wsClient, chatroom);
+
+    await broadcastJoinEvents(wsClient, chatroom, filteredMessages, parsedMessage, isCreatorOnline);
+  } catch (err) {
+    logger.error(`Error in handleJoinChatroom: ${err}`);
+  } finally {
+    wsClient.syncing = false;
+    // Flush queued messages (if any) in order
+    const queued = wsClient.messageQueue ? wsClient.messageQueue.splice(0) : [];
+    for (const qm of queued) {
+      await handleParsedMessage(wsClient, qm);
+    }
+  }
+}
+
+async function checkChatroomAndBan(wsClient: CustomWebSocket, chatroomId: string) {
   const chatroom = await ChatRoom.findById(chatroomId);
   if (!chatroom) {
     wsClient.send(
       JSON.stringify({ type: "error", message: "Chatroom not found" })
     );
-    wsClient.syncing = false;
-    return;
+    return null;
   }
 
   // Check if user is banned
@@ -83,49 +114,28 @@ export async function handleJoinChatroom(
         reason: "banned",
       })
     );
-    wsClient.syncing = false;
-    return;
+    return null;
   }
+  return chatroom;
+}
 
-  const participant = chatroom.participants.find(
-    (p) => p.userAid === wsClient.userAid
-  );
+async function validateRoomAccess(wsClient: CustomWebSocket, chatroom: any, parsedMessage: any): Promise<boolean> {
+  const { joinAuthToken, linkToken, password } = parsedMessage;
+  const participant = chatroom.participants.find((p: any) => p.userAid === wsClient.userAid);
   const isCreator = wsClient.userAid === chatroom.creatorAid;
+  
   let isTokenValid = false;
 
   // 1. Check joinAuthToken (short-lived proof from validate-link)
   if (joinAuthToken && !isCreator && !participant && wsClient.userAid) {
-    if (validateJoinAuthToken(joinAuthToken, chatroomId, wsClient.userAid)) {
+    if (validateJoinAuthToken(joinAuthToken, chatroom._id.toString(), wsClient.userAid)) {
       isTokenValid = true;
     }
   }
 
   // 2. Link token validation (the long-lived invite link itself)
   if (!isTokenValid && linkToken && !isCreator && !participant) {
-    try {
-      const decoded = validateRoomAccessToken(linkToken);
-      if (decoded.roomId === chatroomId) {
-        // A match is either direct (both are hashes) or via bcrypt (one is raw, one is hash)
-        const roomPwd = chatroom.password || null;
-        const tokenPwd = decoded.password || null;
-
-        let isMatch = roomPwd === tokenPwd;
-        if (!isMatch && roomPwd && tokenPwd) {
-          try {
-            isMatch = await bcrypt.compare(tokenPwd, roomPwd);
-          } catch {
-            isMatch = false;
-          }
-        }
-
-        if (!roomPwd || isMatch) {
-          isTokenValid = true;
-        }
-      }
-    } catch {
-      // Token invalid or expired, will fall back to other checks if needed
-      logger.debug(`Invalid link token provided for room ${chatroomId}`);
-    }
+    isTokenValid = await verifyLinkToken(linkToken, chatroom);
   }
 
   // Private room access control
@@ -137,49 +147,11 @@ export async function handleJoinChatroom(
           "This is a private room. Access is only allowed via a secure invite link.",
       })
     );
-    wsClient.syncing = false;
-    return;
-  }
-
-  // Migration for existing rooms without creatorAid
-  if (!chatroom.creatorAid) {
-    chatroom.creatorAid = chatroom.hostAid;
-    await chatroom.save();
-  }
-
-  // If joining user is the creator, they become the host automatically
-  if (
-    wsClient.userAid === chatroom.creatorAid &&
-    chatroom.hostAid !== wsClient.userAid
-  ) {
-    chatroom.hostAid = wsClient.userAid;
-    await chatroom.save();
-
-    // Notify room of host change
-    const chatroomClients = activeChatrooms.get(chatroomId);
-    if (chatroomClients) {
-      const hostUpdate = JSON.stringify({
-        type: "hostUpdated",
-        chatroomId: chatroomId,
-        hostAid: chatroom.hostAid,
-      });
-      chatroomClients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(hostUpdate);
-        }
-      });
-    }
+    return false;
   }
 
   // Password verification for locked rooms
-  // Allow if user is creator, already a participant, or has a valid link token
-  if (
-    chatroom.isLocked &&
-    chatroom.password &&
-    !isCreator &&
-    !participant &&
-    !isTokenValid
-  ) {
+  if (chatroom.isLocked && chatroom.password && !isCreator && !participant && !isTokenValid) {
     if (!password) {
       wsClient.send(
         JSON.stringify({
@@ -188,176 +160,201 @@ export async function handleJoinChatroom(
           requiresPassword: true,
         })
       );
-      wsClient.syncing = false;
-      return;
+      return false;
     }
 
-    const isMatch =
-      password === chatroom.password ||
-      (await bcrypt.compare(password, chatroom.password));
+    const isMatch = password === chatroom.password || (await bcrypt.compare(password, chatroom.password));
     if (!isMatch) {
       wsClient.send(
         JSON.stringify({ type: "error", message: "Incorrect password" })
       );
-      wsClient.syncing = false;
-      return;
+      return false;
     }
   }
 
-  addClientToChatroom(chatroomId, wsClient);
+  return true;
+}
 
+async function verifyLinkToken(linkToken: string, chatroom: any): Promise<boolean> {
+  try {
+    const decoded = validateRoomAccessToken(linkToken);
+    if (decoded.roomId === chatroom._id.toString()) {
+      const roomPwd = chatroom.password || null;
+      const tokenPwd = decoded.password || null;
+
+      let isMatch = roomPwd === tokenPwd;
+      if (!isMatch && roomPwd && tokenPwd) {
+        try {
+           isMatch = await bcrypt.compare(tokenPwd, roomPwd);
+        } catch {
+           isMatch = false;
+        }
+      }
+
+      if (!roomPwd || isMatch) {
+        return true;
+      }
+    }
+  } catch {
+    logger.debug(`Invalid link token provided for room ${chatroom._id}`);
+  }
+  return false;
+}
+
+async function updateParticipantStatus(wsClient: CustomWebSocket, chatroom: any, parsedMessage: any) {
+  const { userAid, username, publicKey, exchangePublicKey, allowedFeatures } = parsedMessage;
+
+  // Migration for existing rooms without creatorAid
+  if (!chatroom.creatorAid) {
+    chatroom.creatorAid = chatroom.hostAid;
+    await chatroom.save();
+  }
+
+  // If joining user is the creator, they become the host automatically
+  if (wsClient.userAid === chatroom.creatorAid && chatroom.hostAid !== wsClient.userAid) {
+    chatroom.hostAid = wsClient.userAid;
+    await chatroom.save();
+    broadcastHostUpdate(chatroom._id.toString(), chatroom.hostAid);
+  }
+
+  addClientToChatroom(chatroom._id.toString(), wsClient);
   wsClient.joinedAt = new Date();
+
+  const participant = chatroom.participants.find((p: any) => p.userAid === wsClient.userAid);
 
   if (participant) {
     // Always reset joinedAt on every join session
-    logger.info(
-      `User ${wsClient.userAid} joined room ${chatroomId}. Resetting joinedAt for new session.`
-    );
+    logger.info(`User ${wsClient.userAid} joined room ${chatroom._id}. Resetting joinedAt for new session.`);
     participant.joinedAt = new Date();
-
-    // Update features if changed
-    if (allowedFeatures) {
-      participant.allowedFeatures = allowedFeatures;
-    }
+    if (allowedFeatures) participant.allowedFeatures = allowedFeatures;
     await chatroom.save();
-  } else if (wsClient.username && wsClient.userAid) {
+  } else if (username && userAid) {
     // If not a participant yet, add them
     chatroom.participants.push({
-      userAid: wsClient.userAid,
-      username: wsClient.username,
-      publicKey: publicKey,
-      exchangePublicKey: exchangePublicKey,
-      allowedFeatures: allowedFeatures,
+      userAid,
+      username,
+      publicKey,
+      exchangePublicKey,
+      allowedFeatures,
       joinedAt: new Date(),
     });
-    // If no host, set as host
     if (!chatroom.hostAid) {
-      chatroom.hostAid = wsClient.userAid;
+      chatroom.hostAid = userAid;
     }
     await chatroom.save();
-    chatEventEmitter.emit(`chatroomUpdated:${chatroomId}`);
+    chatEventEmitter.emit(`chatroomUpdated:${chatroom._id}`);
     chatEventEmitter.emit("chatroomListUpdated");
   }
+}
 
-  const finalPublicKey = participant?.publicKey || publicKey;
-  const finalExchangePublicKey =
-    participant?.exchangePublicKey || exchangePublicKey;
-
-  // Check if creator is online
-  const chatroomClients = activeChatrooms.get(chatroomId);
-  const isCreatorOnline = Array.from(chatroomClients?.values() || []).some(
-    (c) => c.userAid === chatroom.creatorAid
-  );
-
-  // Prepare cached messages
-  let filteredMessages: any[] = [];
-  try {
-    let cachedMessages = await getCachedMessages(chatroomId);
-
-    // If cache is empty, fetch from MongoDB and populate cache
-    if (cachedMessages.length === 0 && chatroom) {
-      logger.debug(`Cache miss for chatroom ${chatroomId}, fetching from DB`);
-      
-      const dbMessages = await Message.find({ chatroomId })
-        .sort({ timestamp: -1 })
-        .limit(50)
-        .lean();
-      
-      // Reverse to get chronological order (oldest first)
-      const reversedbMessages = dbMessages.reverse();
-      cachedMessages = reversedbMessages.map((msg) => {
-        return {
-          ...msg,
-          id: msg._id.toString(), // Ensure ID is string for consistency
-          chatroomId: chatroomId.toString(),
-        };
+function broadcastHostUpdate(chatroomId: string, hostAid: string) {
+    const chatroomClients = activeChatrooms.get(chatroomId);
+    if (chatroomClients) {
+      const hostUpdate = JSON.stringify({
+        type: "hostUpdated",
+        chatroomId,
+        hostAid,
       });
-
-      if (cachedMessages.length > 0) {
-        await cacheMessages(chatroomId, cachedMessages);
-      }
-    }
-
-    // Filter messages: only show messages from the time they joined (incognito mode)
-    const currentParticipant = chatroom.participants.find(
-      (p) => p.userAid === wsClient.userAid
-    );
-    const isCreator = chatroom.creatorAid === currentParticipant?.userAid;
-
-    if (currentParticipant) {
-      const joinedAt = wsClient.joinedAt ? wsClient.joinedAt.getTime() : Date.now();
-
-      for (const msg of cachedMessages) {
-        const msgTimestamp = new Date(msg.timestamp).getTime();
-
-        // Skip messages sent before the user joined/rejoined (Strict Incognito)
-        // All users (including creators/hosts) follow the same visibility rule.
-        if (!isCreator && msgTimestamp < joinedAt) {
-          continue;
+      chatroomClients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(hostUpdate);
         }
+      });
+    }
+}
 
-        filteredMessages.push({
+async function fetchAndFilterMessages(wsClient: CustomWebSocket, chatroom: any) {
+  const chatroomId = chatroom._id.toString();
+  let cachedMessages = await getCachedMessages(chatroomId);
+
+  // If cache is empty, fetch from MongoDB and populate cache
+  if (cachedMessages.length === 0 && chatroom) {
+    logger.debug(`Cache miss for chatroom ${chatroomId}, fetching from DB`);
+    const dbMessages = await Message.find({ chatroomId }).sort({ timestamp: -1 }).limit(50).lean();
+    
+    const reversedbMessages = [...dbMessages].reverse();
+    cachedMessages = reversedbMessages.map((msg) => ({
+      ...msg,
+      id: msg._id.toString(),
+      chatroomId: chatroomId.toString(),
+    }));
+
+    if (cachedMessages.length > 0) {
+      await cacheMessages(chatroomId, cachedMessages);
+    }
+  }
+
+  const currentParticipant = chatroom.participants.find((p: any) => p.userAid === wsClient.userAid);
+  const isCreator = chatroom.creatorAid === currentParticipant?.userAid;
+  const joinedAt = wsClient.joinedAt ? wsClient.joinedAt.getTime() : Date.now();
+  
+  const filteredMessages: any[] = [];
+
+  if (currentParticipant) {
+    for (const msg of cachedMessages) {
+       const msgTimestamp = new Date(msg.timestamp).getTime();
+       // Skip messages sent before the user joined/rejoined (Strict Incognito)
+       if (!isCreator && msgTimestamp < joinedAt) continue;
+       
+       filteredMessages.push(formatMessage(msg, chatroom));
+    }
+  }
+  return filteredMessages;
+}
+
+function formatMessage(msg: any, chatroom: any) {
+    return {
           type: "chatMessage",
           messageId: msg._id || msg.id,
           chatroomId: msg.chatroomId,
           senderAid: msg.senderAid || msg.senderId,
-          senderUsername:
-            msg.senderUsername ||
-            chatroom.participants.find((p) => p.userAid === msg.senderAid)
-              ?.username ||
-            "Anonymous",
+          senderUsername: msg.senderUsername || chatroom.participants.find((p: any) => p.userAid === msg.senderAid)?.username || "Anonymous",
           content: msg.content,
           signature: msg.signature,
           timestamp: new Date(msg.timestamp).toISOString(),
           isEdited: msg.isEdited || false,
           isDeleted: msg.isDeleted || false,
           reactions: msg.reactions || [],
-          replyTo: msg.replyTo
-            ? {
+          replyTo: msg.replyTo ? {
                 messageId: msg.replyTo.messageId.toString(),
                 username: msg.replyTo.username,
                 content: msg.replyTo.content,
                 userAid: msg.replyTo.userAid,
-              }
-            : undefined,
-        });
-      }
-    }
-  } catch (err) {
-    logger.error(
-      `Failed to fetch/prepare cached messages for ${wsClient.id}: ${err}`
-    );
-  }
+              } : undefined,
+    };
+}
 
-  wsClient.send(
-    JSON.stringify({
+async function broadcastJoinEvents(wsClient: CustomWebSocket, chatroom: any, filteredMessages: any[], parsedMessage: any, isCreatorOnline: boolean) {
+  const { allowedFeatures, publicKey, exchangePublicKey } = parsedMessage;
+  const participant = chatroom.participants.find((p: any) => p.userAid === wsClient.userAid);
+  const finalPublicKey = participant?.publicKey || publicKey;
+  const finalExchangePublicKey = participant?.exchangePublicKey || exchangePublicKey;
+  const chatroomId = chatroom._id.toString();
+
+  wsClient.send(JSON.stringify({
       type: "joinSuccess",
-      chatroomId: chatroomId,
+      chatroomId,
       encryptedRoomKey: chatroom.encryptedRoomKey,
       roomKeyIv: chatroom.roomKeyIv,
       hostAid: chatroom.hostAid,
       creatorAid: chatroom.creatorAid,
       isCreatorOnline,
-      // Send all participants currently in the room
-      participants: chatroom.participants
-        .map((p) => ({
+      participants: chatroom.participants.map((p: any) => ({
           userAid: p.userAid,
           username: p.username,
           publicKey: p.publicKey,
           exchangePublicKey: p.exchangePublicKey,
           allowedFeatures: p.allowedFeatures,
-        })),
+      })),
       cachedMessages: filteredMessages,
-    })
-  );
+  }));
 
-  // Notify other participants that a user has joined
-  try {
-    if (chatroomClients) {
+  const chatroomClients = activeChatrooms.get(chatroomId);
+  if (chatroomClients) {
       const isCreatorJoining = wsClient.userAid === chatroom.creatorAid;
       const joinNotice = JSON.stringify({
         type: "userJoined",
-        chatroomId: chatroomId,
+        chatroomId,
         userAid: wsClient.userAid,
         username: wsClient.username,
         publicKey: finalPublicKey,
@@ -367,20 +364,9 @@ export async function handleJoinChatroom(
         isCreator: isCreatorJoining,
       });
       chatroomClients.forEach((client) => {
-        if (client.id === wsClient.id) return; // skip the joining client
-        if (client.readyState === WebSocket.OPEN) {
+        if (client.id !== wsClient.id && client.readyState === WebSocket.OPEN) {
           client.send(joinNotice);
         }
       });
-    }
-  } catch (err) {
-    logger.error(`Failed to broadcast userJoined for ${wsClient.id}: ${err}`);
-  }
-
-  wsClient.syncing = false;
-  // Flush queued messages (if any) in order
-  const queued = wsClient.messageQueue ? wsClient.messageQueue.splice(0) : [];
-  for (const qm of queued) {
-    await handleParsedMessage(wsClient, qm);
   }
 }
