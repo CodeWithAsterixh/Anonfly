@@ -162,4 +162,31 @@ export async function handleMessage(wsClient: CustomWebSocket, parsedMessage: an
       }
     });
   }
+
+  // Also push the message to the embedded messages array in ChatRoom
+  await ChatRoom.updateOne(
+    { _id: chatroomId },
+    { 
+      $push: { 
+        messages: {
+          senderAid: wsClient.userAid,
+          senderUsername: wsClient.username || 'Anonymous',
+          content,
+          signature,
+          timestamp: newMessage.timestamp,
+          sequenceId,
+          isEdited: false,
+          isDeleted: false,
+          replies: [],
+          reactions: [],
+          replyTo: newMessage.replyTo ? {
+            messageId: newMessage.replyTo.messageId,
+            userAid: newMessage.replyTo.userAid,
+            username: newMessage.replyTo.username,
+            content: newMessage.replyTo.content
+          } : undefined
+        }
+      } 
+    }
+  );
 }

@@ -49,8 +49,7 @@ export async function handleEditMessage(wsClient: CustomWebSocket, parsedMessage
     await updateMessageData(chatroom, message.sequenceId, messageId, newContent);
     await updateCacheData(chatroomId, messageId, newContent, chatroom);
     
-    const messageTime = new Date(message.timestamp).getTime();
-    broadcastEdit(chatroomId, messageId, newContent, messageTime);
+    broadcastEdit(chatroomId, messageId, newContent);
 
   } catch (err) {
     logger.error(`Error handling edit: ${err}`);
@@ -106,7 +105,7 @@ async function updateCacheData(chatroomId: string, messageId: string, newContent
   }
 }
 
-function broadcastEdit(chatroomId: string, messageId: string, newContent: string, messageTime: number) {
+function broadcastEdit(chatroomId: string, messageId: string, newContent: string) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (!chatroomClients) return;
 
@@ -119,11 +118,7 @@ function broadcastEdit(chatroomId: string, messageId: string, newContent: string
 
   chatroomClients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      // Only send to clients who joined before this message was originally sent
-      // or if they don't have a joinedAt timestamp (legacy/fallback)
-      if (!client.joinedAt || messageTime >= client.joinedAt.getTime()) {
-         client.send(editBroadcast);
-      }
+      client.send(editBroadcast);
     }
   });
 }

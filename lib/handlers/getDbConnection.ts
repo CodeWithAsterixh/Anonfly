@@ -1,5 +1,14 @@
 import mongoose from "mongoose";
 import env from "../constants/env";
+import dns from "node:dns";
+
+// Use a reliable DNS server to resolve SRV records if possible
+// This is often needed when the default DNS doesn't support SRV lookups (needed for mongodb+srv://)
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (e) {
+  console.warn("Could not set custom DNS servers:", e);
+}
 
 /**
  * Cache for database connections to prevent multiple connections to the same database.
@@ -24,7 +33,16 @@ export default function getDbConnection(): mongoose.Connection {
   }
   const uri = env.MONGODB_URI;
   if (!uri) throw new Error("No MONGODB_URI found");
-  const conn = mongoose.createConnection(uri, { dbName });
+  
+  const conn = mongoose.createConnection(uri, { 
+    dbName,
+    serverSelectionTimeoutMS: 5000, // Timeout after 5s if can't connect
+    socketTimeoutMS: 45000,
+  });
+
+  conn.on('connected', () => console.log(`MongoDB connected to ${dbName}`));
+  conn.on('error', (err) => console.error(`MongoDB connection error:`, err));
+
   connections[dbName] = conn;
   return conn;
 }

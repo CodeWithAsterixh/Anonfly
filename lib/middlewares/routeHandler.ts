@@ -77,7 +77,8 @@ export function routeHandler<ReturnT>({
         if (
           result !== undefined &&
           result.statusCode !== undefined &&
-          result.statusCode <= 299
+          result.statusCode >= 200 &&
+          result.statusCode <= 399
         ) {
           if (Buffer.isBuffer(result) || isStream(result)) {
             return res
@@ -88,6 +89,7 @@ export function routeHandler<ReturnT>({
             return res.status(result.statusCode || 200).json(result);
           }
         } else {
+          console.error(`[RouteHandler] Error status ${result?.statusCode} for ${verb.toUpperCase()} ${path}:`, result);
           return res.status(result?.statusCode || 500).json({
             message: result?.message || "An unexpected error occurred",
             status: "bad",

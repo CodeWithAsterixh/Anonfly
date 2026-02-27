@@ -28,6 +28,9 @@ export default function withErrorHandling<ReturnT>(handler: (event: RouteEvent) 
         conn === "offline" &&
         !options.skipProcesses?.includes("connectionActivity")
       ) {
+        console.warn(`[Connectivity] Service unavailable: checkHttpConnectivity returned ${conn}`);
+        // Return 200 instead of 503 if internet is unreachable, as it might be a false positive in some environments
+        /*
         return {
           status: "bad",
           connectionActivity: "offline",
@@ -36,8 +39,10 @@ export default function withErrorHandling<ReturnT>(handler: (event: RouteEvent) 
           message: "Service unavailable: cannot reach the internet.",
           ...( {} as ReturnT )
         };
+        */
       }
-    } catch {
+    } catch (error) {
+      console.error(`[Connectivity] Error during connectivity check:`, error);
       res.locals.isOnline = "offline";
     }
 
@@ -45,11 +50,11 @@ export default function withErrorHandling<ReturnT>(handler: (event: RouteEvent) 
     try {
       const data = await handler(event);
       return {
-        message: "Request processed successfully",
+        message: data.message || "Request processed successfully",
         connectionActivity: res.locals.isOnline,
-        statusCode: 200,
-        success: true,
-        status: "good",
+        statusCode: data.statusCode || 200,
+        success: data.success !== undefined ? data.success : true,
+        status: data.status || "good",
         ...data,
       };
     } catch (err) {

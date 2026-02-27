@@ -66,6 +66,8 @@ export interface IParticipant {
   allowedFeatures?: string[];
   /** Timestamp when the user joined the room */
   joinedAt?: Date;
+  /** Encrypted session key for E2EE communication */
+  encryptedSessionKey?: string;
 }
 
 /**
@@ -139,6 +141,7 @@ const ChatRoomSchema = new Schema<IChatRoom>({
   password: { type: String },
   isLocked: { type: Boolean, default: false },
   isPrivate: { type: Boolean, default: false },
+  messageSequenceCounter: { type: Number, default: 0 },
   participants: [ParticipantSchema],
   bans: [new Schema({
     userAid: { type: String, required: true },
@@ -154,6 +157,7 @@ const ChatRoomSchema = new Schema<IChatRoom>({
     timestamp: { type: Date, default: Date.now, index: true },
     isEdited: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false }, // Add isDeleted to schema
+    sequenceId: { type: Number, required: true },
     replies: [{ type: Types.ObjectId }], // Array of message IDs that are replies to this message
     reactions: [ReactionSchema], // Array of reactions to this message
     replyTo: ReplyToSchema, // Object containing details of the message this is a reply to

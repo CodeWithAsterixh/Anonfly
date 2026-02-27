@@ -294,9 +294,10 @@ async function fetchAndFilterMessages(wsClient: CustomWebSocket, chatroom: any) 
 
 function formatMessage(msg: any, chatroom: any) {
     return {
-          type: "chatMessage",
-          messageId: msg._id || msg.id,
-          chatroomId: msg.chatroomId,
+          id: msg._id?.toString() || msg.id?.toString(),
+          type: "message",
+          messageId: msg._id?.toString() || msg.id?.toString(),
+          chatroomId: msg.chatroomId?.toString(),
           senderAid: msg.senderAid || msg.senderId,
           senderUsername: msg.senderUsername || chatroom.participants.find((p: any) => p.userAid === msg.senderAid)?.username || "Anonymous",
           content: msg.content,
@@ -304,6 +305,7 @@ function formatMessage(msg: any, chatroom: any) {
           timestamp: new Date(msg.timestamp).toISOString(),
           isEdited: msg.isEdited || false,
           isDeleted: msg.isDeleted || false,
+          isEncrypted: false, // Default to false, client will decrypt
           reactions: msg.reactions || [],
           replyTo: msg.replyTo ? {
                 messageId: msg.replyTo.messageId.toString(),

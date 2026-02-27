@@ -36,8 +36,7 @@ export async function handleDeleteMessage(wsClient: CustomWebSocket, parsedMessa
     await deleteMessageData(chatroom, message);
     await deleteCacheData(chatroomId, messageId, chatroom);
 
-    const messageTime = new Date(message.timestamp).getTime();
-    broadcastDeletion(chatroomId, messageId, messageTime);
+    broadcastDeletion(chatroomId, messageId);
 
   } catch (err) {
     logger.error(`Error handling deletion: ${err}`);
@@ -77,7 +76,7 @@ async function deleteCacheData(chatroomId: string, messageId: string, chatroom: 
   }
 }
 
-function broadcastDeletion(chatroomId: string, messageId: string, messageTime: number) {
+function broadcastDeletion(chatroomId: string, messageId: string) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (!chatroomClients) return;
 
@@ -90,10 +89,7 @@ function broadcastDeletion(chatroomId: string, messageId: string, messageTime: n
 
   chatroomClients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      // Only send to clients who joined before this message was originally sent
-      if (!client.joinedAt || messageTime >= client.joinedAt.getTime()) {
-        client.send(deleteBroadcast);
-      }
+      client.send(deleteBroadcast);
     }
   });
 }

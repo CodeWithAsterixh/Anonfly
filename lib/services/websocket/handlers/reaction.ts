@@ -44,10 +44,21 @@ export async function handleReaction(wsClient: CustomWebSocket, parsedMessage: a
 function updateMessageReactions(message: any, reaction: any) {
   if (!message.reactions) message.reactions = [];
   
-  const existingIndex = message.reactions.findIndex((r: any) => r.userAid === reaction.userAid && r.emojiId === reaction.emojiId);
-  if (existingIndex > -1) {
-    message.reactions.splice(existingIndex, 1);
+  // Find any existing reaction from this user
+  const userReactionIndex = message.reactions.findIndex((r: any) => r.userAid === reaction.userAid);
+  
+  if (userReactionIndex > -1) {
+    const existingReaction = message.reactions[userReactionIndex];
+    
+    // If it's the same emoji, remove it (toggle off)
+    if (existingReaction.emojiId === reaction.emojiId) {
+      message.reactions.splice(userReactionIndex, 1);
+    } else {
+      // If it's a different emoji, replace the existing one
+      message.reactions[userReactionIndex] = reaction;
+    }
   } else {
+    // If no existing reaction, add the new one
     message.reactions.push(reaction);
   }
 }
@@ -64,19 +75,14 @@ async function updateCachedReactions(chatroomId: string, messageId: string, reac
 function broadcastReaction(chatroomId: string, messageId: string, message: any) {
   const chatroomClients = activeChatrooms.get(chatroomId);
   if (chatroomClients) {
-    const messageTime = new Date(message.timestamp).getTime();
     const reactionBroadcast = JSON.stringify({
-      type: 'reactionUpdated',
+      type: 'reactionUpdate',
       messageId,
       reactions: message.reactions
     });
 
     chatroomClients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
-        // Only send to clients who joined before the message was sent
-        if (client.joinedAt && messageTime < client.joinedAt.getTime()) {
-          return;
-        }
         client.send(reactionBroadcast);
       }
     });
