@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import env from "../constants/env";
 import dns from "node:dns";
+import logger from "../middlewares/logger";
 
 // Use a reliable DNS server to resolve SRV records if possible
 // This is often needed when the default DNS doesn't support SRV lookups (needed for mongodb+srv://)
@@ -40,8 +41,8 @@ export default function getDbConnection(): mongoose.Connection {
     socketTimeoutMS: 45000,
   });
 
-  conn.on('connected', () => console.log(`MongoDB connected to ${dbName}`));
-  conn.on('error', (err) => console.error(`MongoDB connection error:`, err));
+  conn.on('connected', () => logger.db.info(`MongoDB connected to ${dbName}`));
+  conn.on('error', (err) => logger.db.error({ err }, 'MongoDB connection error'));
 
   connections[dbName] = conn;
   return conn;

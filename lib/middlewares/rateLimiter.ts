@@ -41,8 +41,8 @@ export const rateLimiter = (limit: number = 100, windowMs: number = 60 * 1000) =
     legacyHeaders: false,
     validate: { xForwardedForHeader: false }, // Disable x-forwarded-for validation as it's checked manually or via trust proxy
     store: redisClient ? new RedisStore({
-      // @ts-ignore - ioredis call signature match
-      sendCommand: (...args: string[]) => redisClient!.call(...args),
+      sendCommand: (...args: string[]) =>
+        (redisClient as unknown as { call: (...args: string[]) => unknown }).call(...args),
     }) : undefined,
     message: {
       success: false,
