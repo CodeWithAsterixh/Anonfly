@@ -26,6 +26,8 @@ import { AuthController } from "./presentation/controllers/AuthController";
 import { WebSocketAdapter } from "./presentation/websocket/WebSocketAdapter";
 import { chatRoutes } from "./presentation/routes/chatRoutes";
 import { createAuthRoutes } from "./presentation/routes/authRoutes";
+import { createAdminRoutes } from "./presentation/routes/adminRoutes";
+import { AdminController } from "./presentation/controllers/AdminController";
 
 import { EditMessageUseCase } from "./application/use-cases/EditMessage";
 import { DeleteMessageUseCase } from "./application/use-cases/DeleteMessage";
@@ -81,6 +83,7 @@ const chatController = new ChatController(
 );
 
 const authController = new AuthController(generateChallengeUseCase, verifyIdentityUseCase);
+const adminController = new AdminController(apiKeyRepo);
 
 const wsAdapter = new WebSocketAdapter(
     eventEmitter,
@@ -95,6 +98,7 @@ const wsAdapter = new WebSocketAdapter(
 );
 
 app.use("/api/v1/auth", createAuthRoutes(authController, sessionRepo));
+app.use("/api/v1/admin", createAdminRoutes(adminController));
 app.use("/api/v1", chatRoutes(chatController, apiKeyRepo, sessionRepo));
 
 wsAdapter.listen(server);

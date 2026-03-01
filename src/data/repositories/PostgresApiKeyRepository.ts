@@ -9,6 +9,11 @@ export class PostgresApiKeyRepository implements IApiKeyRepository {
         return this.mapToEntity(res.rows[0]);
     }
 
+    async findAll(): Promise<ApiKey[]> {
+        const res = await db.query("SELECT * FROM api_keys ORDER BY created_at DESC");
+        return res.rows.map(row => this.mapToEntity(row));
+    }
+
     async save(apiKey: ApiKey): Promise<ApiKey> {
         const res = await db.query(
             `INSERT INTO api_keys (key_hash, name, is_active)
