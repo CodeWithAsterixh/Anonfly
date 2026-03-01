@@ -31,6 +31,9 @@ PORT=5001
 API_KEY_SECRET="your-secret"
 ```
 
+> [!IMPORTANT]
+> **To obtain a production API key**, please send an email to **peterpaultolulope@gmail.com**. Anonfly is a premium service and requires a valid API key for usage.
+
 ### 3. Database Setup
 Run migrations and seed the database with initial data:
 ```bash
