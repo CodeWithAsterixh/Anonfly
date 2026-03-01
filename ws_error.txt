@@ -1,0 +1,10 @@
+[2026-02-28T18:41:45.046Z] WS Error: relation "reactions" does not exist
+error: relation "reactions" does not exist
+    at C:\Users\peter\Documents\Works\anonfly-project\anonfly-service\node_modules\.pnpm\pg-pool@3.12.0_pg@8.19.0\node_modules\pg-pool\index.js:45:11
+    at processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Object.query (C:\Users\peter\Documents\Works\anonfly-project\anonfly-service\src\data\database\PostgresClient.ts:19:21)
+    at async PostgresMessageRepository.findById (C:\Users\peter\Documents\Works\anonfly-project\anonfly-service\src\data\repositories\PostgresMessageRepository.ts:7:21)
+    at async SendMessageUseCase.execute (C:\Users\peter\Documents\Works\anonfly-project\anonfly-service\src\application\use-cases\SendMessage.ts:38:25)
+    at async WebSocketAdapter.handleChatMessage (C:\Users\peter\Documents\Works\anonfly-project\anonfly-service\src\presentation\websocket\WebSocketAdapter.ts:105:9)
+    at async WebSocketAdapter.handleMessage (C:\Users\peter\Documents\Works\anonfly-project\anonfly-service\src\presentation\websocket\WebSocketAdapter.ts:59:21)
+---
