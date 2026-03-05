@@ -12,10 +12,14 @@ export class DeleteMessageUseCase {
     ) { }
 
     async execute(input: DeleteMessageInput) {
+        const message = await this.messageLogic.messageRepo.findById(input.messageId);
+        if (!message) return;
+
         await this.messageLogic.deleteMessage(input.messageId);
 
         this.eventEmitter.emit(Events.MESSAGE_DELETED, {
-            messageId: input.messageId
+            messageId: input.messageId,
+            conversationId: message.conversationId
         });
     }
 }

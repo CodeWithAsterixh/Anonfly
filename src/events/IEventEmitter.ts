@@ -11,4 +11,6 @@ export const Events = {
     REACTION_REMOVED: "ReactionRemoved",
     MESSAGE_DELIVERED: "MessageDelivered",
     CONVERSATION_CREATED: "ConversationCreated",
+    PARTICIPANT_JOINED: "ParticipantJoined",
+    PARTICIPANT_LEFT: "ParticipantLeft",
 };

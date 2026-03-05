@@ -3,7 +3,7 @@ import { Message } from "../entities/Message";
 import { v4 as uuidv4 } from "uuid";
 
 export class MessageLogic {
-    constructor(private readonly messageRepo: IMessageRepository) { }
+    constructor(public readonly messageRepo: IMessageRepository) { }
 
     async sendMessage(
         conversationId: string,

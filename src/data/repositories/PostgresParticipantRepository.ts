@@ -29,6 +29,11 @@ export class PostgresParticipantRepository implements IParticipantRepository {
         return res.rows.map(this.mapToEntity);
     }
 
+    async countByConversation(conversationId: string): Promise<number> {
+        const res = await db.query("SELECT COUNT(*) FROM participants WHERE conversation_id = $1", [conversationId]);
+        return parseInt(res.rows[0].count);
+    }
+
     async delete(conversationId: string, identityId: string): Promise<void> {
         await db.query("DELETE FROM participants WHERE conversation_id = $1 AND identity_id = $2", [conversationId, identityId]);
     }

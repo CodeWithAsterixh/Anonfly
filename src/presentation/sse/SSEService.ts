@@ -1,16 +1,29 @@
 import { Response } from "express";
-import { IEventEmitter, Events } from "../../events/IEventEmitter";
 import { GetPublicRoomsUseCase } from "../../application/use-cases/GetPublicRooms";
+import { Events, IEventEmitter } from "../../events/IEventEmitter";
 
 export class SSEService {
-    private roomClients: Map<string, Set<Response>> = new Map();
-    private publicListClients: Map<Response, string | undefined> = new Map();
+    private readonly roomClients: Map<string, Set<Response>> = new Map();
+    private readonly publicListClients: Map<Response, string | undefined> = new Map();
 
     constructor(
         private readonly eventEmitter: IEventEmitter,
         private readonly getPublicRoomsUseCase: GetPublicRoomsUseCase
     ) {
         this.setupSubscriptions();
+        this.startHeartbeat();
+    }
+
+    private startHeartbeat() {
+        setInterval(() => {
+            const heartbeat = `event: heartbeat\ndata: ${Date.now()}\n\n`;
+            this.roomClients.forEach(clients => {
+                clients.forEach(client => client.write(heartbeat));
+            });
+            this.publicListClients.forEach((_, client) => {
+                client.write(heartbeat);
+            });
+        }, 30000); // Every 30 seconds
     }
 
     private setupSubscriptions() {
@@ -22,6 +35,14 @@ export class SSEService {
         });
 
         this.eventEmitter.on(Events.CONVERSATION_CREATED, () => {
+            this.broadcastToPublicList({ type: 'list_update' });
+        });
+
+        this.eventEmitter.on(Events.PARTICIPANT_JOINED, () => {
+            this.broadcastToPublicList({ type: 'list_update' });
+        });
+
+        this.eventEmitter.on(Events.PARTICIPANT_LEFT, () => {
             this.broadcastToPublicList({ type: 'list_update' });
         });
     }
@@ -44,7 +65,7 @@ export class SSEService {
         });
     }
 
-    private broadcastToRoom(chatroomId: string, data: any) {
+    private broadcastToRoom(chatroomId: string, data: Record<string, unknown>) {
         const clients = this.roomClients.get(chatroomId);
         if (clients) {
             const message = `data: ${JSON.stringify(data)}\n\n`;
@@ -52,10 +73,9 @@ export class SSEService {
         }
     }
 
-    private async broadcastToPublicList(data: any) {
-        // If data is just a signal, we fetch the actual list
-        if (data.type === 'list_update') {
-            // Group clients by region to avoid redundant DB calls
+    private async broadcastToPublicList(data?: Record<string, unknown>) {
+        // Always broadcast the full list if data is missing or is list_update
+        if (!data || data.type === 'list_update') {
             const regionGroups: Map<string | undefined, Response[]> = new Map();
             this.publicListClients.forEach((region, client) => {
                 const clients = regionGroups.get(region) || [];
@@ -70,7 +90,7 @@ export class SSEService {
                     roomname: r.roomName,
                     description: r.description || "",
                     hostAid: r.hostAid,
-                    participantCount: 0,
+                    participantCount: r.participantCount,
                     lastMessage: null,
                     isLocked: r.isLocked,
                     isPrivate: r.isPrivate

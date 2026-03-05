@@ -1,8 +1,9 @@
+import { Identity } from "../../business/entities/Identity";
 import { IConversationRepository } from "../../business/logic/interfaces/IConversationRepository";
 import { IIdentityRepository } from "../../business/logic/interfaces/IIdentityRepository";
 import { IParticipantRepository } from "../../business/logic/interfaces/IParticipantRepository";
-import { Identity } from "../../business/entities/Identity";
-import { Participant } from "../../business/entities/Participant";
+
+import { Events, IEventEmitter } from "../../events/IEventEmitter";
 
 export interface JoinRoomRequest {
     roomName?: string;
@@ -18,7 +19,8 @@ export class JoinRoomUseCase {
     constructor(
         private readonly conversationRepo: IConversationRepository,
         private readonly identityRepo: IIdentityRepository,
-        private readonly participantRepo: IParticipantRepository
+        private readonly participantRepo: IParticipantRepository,
+        private readonly eventEmitter: IEventEmitter
     ) { }
 
     async execute(request: JoinRoomRequest) {
@@ -35,29 +37,32 @@ export class JoinRoomUseCase {
 
         if (!identityId) {
             let identity = await this.identityRepo.findByAid(request.userAid);
-            if (!identity) {
-                identity = await this.identityRepo.save(new Identity(
-                    request.userAid,
-                    undefined,
-                    request.username || undefined,
-                    request.publicKey || undefined
-                ));
-            }
+            identity ??= await this.identityRepo.save(new Identity(
+                request.userAid,
+                undefined,
+                request.username || undefined,
+                request.publicKey || undefined
+            ));
             identityId = identity.id!;
         }
 
         const existingParticipant = await this.participantRepo.findByConversationAndIdentity(
-            conversation.id!,
+            conversation.id,
             identityId
         );
 
         if (!existingParticipant) {
             await this.participantRepo.save({
-                conversationId: conversation.id!,
+                conversationId: conversation.id,
                 identityId: identityId,
                 role: "member",
                 joinedAt: new Date(),
                 encryptedSessionKey: request.encryptedSessionKey
+            });
+
+            this.eventEmitter.emit(Events.PARTICIPANT_JOINED, {
+                conversationId: conversation.id,
+                identityId: identityId
             });
         }
 

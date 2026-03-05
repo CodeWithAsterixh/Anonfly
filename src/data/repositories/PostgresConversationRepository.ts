@@ -30,6 +30,23 @@ export class PostgresConversationRepository implements IConversationRepository {
         return this.mapToEntity(res.rows[0]);
     }
 
+    async update(c: Conversation): Promise<Conversation> {
+        const res = await db.query(
+            `UPDATE conversations SET 
+        room_name = $1, description = $2, region = $3, host_aid = $4, creator_aid = $5, 
+        encrypted_room_key = $6, room_key_iv = $7, is_locked = $8, password_hash = $9, is_private = $10,
+        updated_at = NOW()
+      WHERE id = $11
+      RETURNING *`,
+            [
+                c.roomName, c.description, c.region, c.hostAid, c.creatorAid,
+                c.encryptedRoomKey, c.roomKeyIv, c.isLocked, c.passwordHash, c.isPrivate,
+                c.id
+            ]
+        );
+        return this.mapToEntity(res.rows[0]);
+    }
+
     async delete(id: string): Promise<void> {
         await db.query("DELETE FROM conversations WHERE id = $1", [id]);
     }

@@ -20,6 +20,9 @@ export class AddReactionUseCase {
     async execute(input: AddReactionInput) {
         const identity = await this.identityLogic.getOrCreateIdentity(input.userAid);
 
+        const message = await this.messageLogic.messageRepo.findById(input.messageId);
+        if (!message) return;
+
         await this.messageLogic.addReaction(
             input.messageId,
             identity.id!,
@@ -30,6 +33,7 @@ export class AddReactionUseCase {
 
         this.eventEmitter.emit(Events.REACTION_ADDED, {
             messageId: input.messageId,
+            conversationId: message.conversationId,
             userAid: input.userAid,
             username: identity.username,
             emojiId: input.emojiId,

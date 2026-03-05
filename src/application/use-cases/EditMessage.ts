@@ -13,12 +13,15 @@ export class EditMessageUseCase {
     ) { }
 
     async execute(input: EditMessageInput) {
+        const message = await this.messageLogic.messageRepo.findById(input.messageId);
+        if (!message) return;
+
         await this.messageLogic.editMessage(input.messageId, input.content);
 
-        // Re-fetch message for broadcast (or logic could return it)
-        // For now, let's just emit the id and new content
+        // Emit with conversationId for targeted broadcast
         this.eventEmitter.emit(Events.MESSAGE_EDITED, {
             messageId: input.messageId,
+            conversationId: message.conversationId,
             content: input.content
         });
     }

@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { ChatController } from "../controllers/ChatController";
-import { apiKeyAuth } from "../../auth/apikey/middleware";
 import { sessionAuth } from "../../auth/session/middleware";
 import { IApiKeyRepository } from "../../business/logic/interfaces/IApiKeyRepository";
 import { ISessionRepository } from "../../business/logic/interfaces/ISessionRepository";
+import { ChatController } from "../controllers/ChatController";
 
 export const chatRoutes = (
     chatController: ChatController,
@@ -14,9 +13,10 @@ export const chatRoutes = (
 
     // Public routes
     router.get("/chatrooms", (req, res) => chatController.getPublicRooms(req, res));
+    router.post("/chatrooms/validate-link", (req, res) => chatController.validateShareLink(req, res));
     router.get("/chatroom/:chatroomId/details", (req, res) => chatController.getChatroomDetails(req, res));
     router.get("/chatroom/:chatroomId/details/sse", (req, res) => chatController.getRoomDetailsSSE(req, res));
-    router.post("/chatroom/:chatroomId/check-access", sessionAuth(sessionRepo), (req, res) => chatController.checkAccess(req, res));
+    router.post("/chatroom/:chatroomId/check-access", (req, res) => chatController.checkAccess(req, res));
 
     // Protected by session (Client-facing)
     router.post("/chatrooms", sessionAuth(sessionRepo), (req, res) => chatController.createRoom(req, res));

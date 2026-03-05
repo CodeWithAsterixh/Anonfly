@@ -1,20 +1,23 @@
-import { WebSocketServer, WebSocket } from "ws";
-import { Server } from "http";
-import * as fs from "fs";
-import * as path from "path";
-import { IEventEmitter, Events } from "../../events/IEventEmitter";
-import { SendMessageUseCase } from "../../application/use-cases/SendMessage";
-import { JoinRoomUseCase } from "../../application/use-cases/JoinRoom";
-import { EditMessageUseCase } from "../../application/use-cases/EditMessage";
-import { DeleteMessageUseCase } from "../../application/use-cases/DeleteMessage";
+import * as fs from "node:fs";
+import { Server } from "node:http";
+import { WebSocket, WebSocketServer } from "ws";
 import { AddReactionUseCase } from "../../application/use-cases/AddReaction";
+import { DeleteMessageUseCase } from "../../application/use-cases/DeleteMessage";
+import { EditMessageUseCase } from "../../application/use-cases/EditMessage";
 import { GetChatroomDetailsUseCase } from "../../application/use-cases/GetChatroomDetails";
 import { GetMessageHistoryUseCase } from "../../application/use-cases/GetMessageHistory";
+import { JoinRoomUseCase } from "../../application/use-cases/JoinRoom";
+import { LeaveRoomUseCase } from "../../application/use-cases/LeaveRoom";
+import { SaveRoomKeyUseCase } from "../../application/use-cases/SaveRoomKey";
+import { SendMessageUseCase } from "../../application/use-cases/SendMessage";
 import { ISessionRepository } from "../../business/logic/interfaces/ISessionRepository";
+import { Events, IEventEmitter } from "../../events/IEventEmitter";
 
 export class WebSocketAdapter {
     private wss: WebSocketServer | null = null;
-    private clients: Map<string, Set<WebSocket>> = new Map(); // conversationId -> Set of WebSockets
+    private readonly clients: Map<string, Set<WebSocket>> = new Map(); // conversationId -> Set of WebSockets
+    private readonly wsIdentities: Map<WebSocket, { identityId: string, userAid: string, username: string }> = new Map(); // ws -> identity data
+    private readonly wsRooms: Map<WebSocket, Set<string>> = new Map(); // ws -> set of conversationIds
 
     constructor(
         private readonly eventEmitter: IEventEmitter,
@@ -25,6 +28,8 @@ export class WebSocketAdapter {
         private readonly addReactionUseCase: AddReactionUseCase,
         private readonly getChatroomDetailsUseCase: GetChatroomDetailsUseCase,
         private readonly getMessageHistoryUseCase: GetMessageHistoryUseCase,
+        private readonly saveRoomKeyUseCase: SaveRoomKeyUseCase,
+        private readonly leaveRoomUseCase: LeaveRoomUseCase,
         private readonly sessionRepository: ISessionRepository
     ) {
         this.setupEventListeners();
@@ -71,8 +76,23 @@ export class WebSocketAdapter {
                 case "reaction":
                     await this.handleReaction(ws, message, identityId);
                     break;
+                case "saveRoomKey":
+                    await this.handleSaveRoomKey(ws, message);
+                    break;
                 case "leaveChatroom":
                     this.handleLeaveRoom(ws, message);
+                    break;
+                case "typing":
+                    this.handleTyping(ws, message);
+                    break;
+                case "roomKeyRequest":
+                    this.handleRoomKeyRequest(ws, message);
+                    break;
+                case "roomKeyShare":
+                    this.handleRoomKeyShare(ws, message);
+                    break;
+                case "ping":
+                    ws.send(JSON.stringify({ type: "pong", timestamp: new Date().toISOString() }));
                     break;
                 default:
                     console.log("Unknown WS message type:", type);
@@ -86,13 +106,23 @@ export class WebSocketAdapter {
     private async handleJoinRoom(ws: WebSocket, data: any, identityId?: string) {
         const { chatroomId, userAid, username, publicKey, exchangePublicKey, allowedFeatures } = data;
 
-        // 1. Ensure/Update participant using UseCase
+        console.log(`[WS] Joining room: ${chatroomId} for user: ${userAid}`);
+        // 1. Persist participation
         await this.joinRoomUseCase.execute({
             conversationId: chatroomId,
             userAid,
-            username,
+            publicKey,
             identityId
         });
+        console.log(`[WS] Participation persisted for ${userAid} in ${chatroomId}`);
+
+        if (identityId) {
+            this.wsIdentities.set(ws, { identityId, userAid, username: username || "Anonymous" });
+            if (!this.wsRooms.has(ws)) {
+                this.wsRooms.set(ws, new Set());
+            }
+            this.wsRooms.get(ws)!.add(chatroomId);
+        }
 
         // 2. Track connection for broadcasting
         if (!this.clients.has(chatroomId)) {
@@ -101,8 +131,10 @@ export class WebSocketAdapter {
         this.clients.get(chatroomId)!.add(ws);
 
         // 3. Get room details and history
+        console.log(`[WS] Fetching room details and history for ${chatroomId}`);
         const room = await this.getChatroomDetailsUseCase.execute({ chatroomId });
         const messages = await this.getMessageHistoryUseCase.execute({ conversationId: chatroomId, limit: 50 });
+        console.log(`[WS] Details fetched. Sending joinSuccess for ${chatroomId}`);
 
         // 4. Send joinSuccess to the joining client
         ws.send(JSON.stringify({
@@ -173,26 +205,109 @@ export class WebSocketAdapter {
             emojiValue,
             emojiType
         });
+        // We broadcast reactions via event emitter (see setupEventListeners)
     }
 
-    private handleLeaveRoom(ws: WebSocket, data: any) {
+    private handleTyping(ws: WebSocket, data: any) {
+        const { chatroomId, userAid, username, isTyping } = data;
+        if (!chatroomId || !userAid) return;
+
+        this.broadcast(chatroomId, {
+            type: "typing",
+            chatroomId,
+            userAid,
+            username: username || "Anonymous",
+            isTyping
+        }, ws); // Don't send back to the sender
+    }
+
+    private async handleSaveRoomKey(ws: WebSocket, data: any) {
+        const { chatroomId, encryptedKey, iv } = data;
+        await this.saveRoomKeyUseCase.execute({ chatroomId, encryptedKey, iv });
+        ws.send(JSON.stringify({ type: "saveRoomKeySuccess", chatroomId }));
+    }
+
+    private handleRoomKeyRequest(ws: WebSocket, data: any) {
         const { chatroomId } = data;
-        this.clients.get(chatroomId)?.delete(ws);
+        const identityData = this.wsIdentities.get(ws);
+
+        this.broadcastToOthers(chatroomId, ws, {
+            type: "roomKeyRequest",
+            chatroomId,
+            senderAid: identityData?.userAid || data.senderAid
+        });
     }
 
-    private handleClose(ws: WebSocket) {
+    private handleRoomKeyShare(ws: WebSocket, data: any) {
+        const { chatroomId, targetAid, encryptedKey, iv } = data;
+        const identityData = this.wsIdentities.get(ws);
+
+        // Find the WebSocket for targetAid
+        // For simplicity in this implementation, we broadcast to all in the room
+        // Clients will filter based on targetAid
+        this.broadcastToOthers(chatroomId, ws, {
+            type: "roomKeyShare",
+            chatroomId,
+            senderAid: identityData?.userAid || data.senderAid,
+            targetAid,
+            encryptedKey,
+            iv
+        });
+    }
+
+    private async handleLeaveRoom(ws: WebSocket, data: any) {
+        const { chatroomId } = data;
+        const identityData = this.wsIdentities.get(ws);
+        this.clients.get(chatroomId)?.delete(ws);
+
+        if (identityData) {
+            await this.leaveRoomUseCase.execute({ conversationId: chatroomId, identityId: identityData.identityId });
+            this.wsRooms.get(ws)?.delete(chatroomId);
+
+            // Broadcast userLeft
+            this.broadcast(chatroomId, {
+                type: "userLeft",
+                chatroomId,
+                userAid: identityData.userAid,
+                username: identityData.username,
+                timestamp: new Date().toISOString()
+            });
+        }
+    }
+
+    private async handleClose(ws: WebSocket) {
         this.clients.forEach((sockets) => sockets.delete(ws));
+
+        const identityData = this.wsIdentities.get(ws);
+        const rooms = this.wsRooms.get(ws);
+        if (identityData && rooms) {
+            for (const chatroomId of rooms) {
+                await this.leaveRoomUseCase.execute({ conversationId: chatroomId, identityId: identityData.identityId });
+
+                // Broadcast userLeft to each room
+                this.broadcast(chatroomId, {
+                    type: "userLeft",
+                    chatroomId,
+                    userAid: identityData.userAid,
+                    username: identityData.username,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        }
+        this.wsIdentities.delete(ws);
+        this.wsRooms.delete(ws);
     }
 
     private setupEventListeners() {
         this.eventEmitter.on(Events.MESSAGE_CREATED, (message) => {
+            console.log(`[WS-Event] Broadcasting message to ${message.conversationId}`);
             this.broadcast(message.conversationId, {
-                type: "message",
-                id: message.id,
+                type: "chatMessage",
+                messageId: message.id, // Client uses messageId or id
                 senderAid: message.senderAid,
                 senderUsername: message.senderUsername,
                 content: message.content,
-                timestamp: message.timestamp.toISOString(),
+                timestamp: message.timestamp.toISOString ? message.timestamp.toISOString() : message.timestamp,
                 isEdited: message.isEdited,
                 isDeleted: message.isDeleted,
                 replyTo: message.replyToId ? { messageId: message.replyToId } : null,
@@ -201,38 +316,35 @@ export class WebSocketAdapter {
         });
 
         this.eventEmitter.on(Events.MESSAGE_EDITED, (data) => {
-            this.broadcastUpdate(data.messageId, {
-                type: "editMessage",
-                ...data
-            });
+            if (data.conversationId) {
+                this.broadcast(data.conversationId, {
+                    type: "messageEdited",
+                    ...data
+                });
+            }
         });
 
         this.eventEmitter.on(Events.MESSAGE_DELETED, (data) => {
-            this.broadcastUpdate(data.messageId, {
-                type: "deleteMessage",
-                ...data
-            });
+            if (data.conversationId) {
+                this.broadcast(data.conversationId, {
+                    type: "messageDeleted",
+                    ...data
+                });
+            }
         });
 
         this.eventEmitter.on(Events.REACTION_ADDED, (data) => {
-            this.broadcastUpdate(data.messageId, {
-                type: "reaction",
-                ...data
-            });
+            if (data.conversationId) {
+                this.broadcast(data.conversationId, {
+                    type: "reactionUpdate",
+                    ...data
+                });
+            }
         });
     }
 
     private broadcastUpdate(messageId: string, data: any) {
-        // Since we don't track which message belongs to which room globally here, 
-        // we might need to find the room for the message first if we want targeted broadcast.
-        // For now, let's assume we can broadcast to all for simplicity or find room if possible.
-        // Actually, we should probably include chatroomId in the events.
-
-        // Let's broadcast to all rooms for now as a fallback, 
-        // but better to have chatroomId in the event.
-        this.clients.forEach((sockets, chatroomId) => {
-            this.broadcast(chatroomId, data);
-        });
+        // Obsolete, we use targeted broadcast now
     }
 
     private broadcastToOthers(chatroomId: string, senderWs: WebSocket, data: any) {
@@ -247,12 +359,12 @@ export class WebSocketAdapter {
         }
     }
 
-    private broadcast(chatroomId: string, data: any) {
+    private broadcast(chatroomId: string, data: any, excludeWs?: WebSocket) {
         const sockets = this.clients.get(chatroomId);
         if (sockets) {
             const payload = JSON.stringify(data);
             sockets.forEach((ws) => {
-                if (ws.readyState === WebSocket.OPEN) {
+                if (ws !== excludeWs && ws.readyState === WebSocket.OPEN) {
                     ws.send(payload);
                 }
             });

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response, Request } from "express";
 import { CreateRoomUseCase } from "../../application/use-cases/CreateRoom";
 import { SendMessageUseCase } from "../../application/use-cases/SendMessage";
 import { JoinRoomUseCase } from "../../application/use-cases/JoinRoom";
@@ -23,12 +23,19 @@ export class ChatController {
         try {
             const session = (req as any).session;
             const hostAid = session?.identityAid;
-            const { roomname, password, ...rest } = req.body;
+            const { roomname, password, isPrivate, isLocked, ...rest } = req.body;
+
+            // Normalize booleans
+            const normalizedIsPrivate = String(isPrivate) === 'true' || isPrivate === true;
+            const normalizedIsLocked = String(isLocked) === 'true' || isLocked === true;
+
             const result = await this.createRoomUseCase.execute({
                 ...rest,
                 roomName: roomname,
                 passwordHash: password,
-                hostAid
+                hostAid,
+                isPrivate: normalizedIsPrivate,
+                isLocked: normalizedIsLocked
             });
             res.status(201).json({
                 success: true,
@@ -104,29 +111,39 @@ export class ChatController {
         try {
             const { chatroomId } = req.params;
             const session = (req as any).session;
-            const identityId = session?.identityId;
             const userAid = session?.identityAid;
+            const { joinAuthToken } = req.body;
 
             const room = await this.getChatroomDetailsUseCase.execute({ chatroomId: chatroomId as string });
+
+            // Normalize booleans
+            const isPrivate = String(room.isPrivate) === 'true' || room.isPrivate === true;
             const isCreator = room.hostAid === userAid;
             const isParticipant = room.participants.some(p => p.userAid === userAid);
+            const hasValidJoinToken = joinAuthToken?.startsWith(`guest-access-${chatroomId}`);
 
-            if (isCreator || isParticipant || !room.isPrivate) {
+            console.log(`[CheckAccess] Room: ${chatroomId}, User: ${userAid}, isPrivate: ${isPrivate}, isCreator: ${isCreator}, isParticipant: ${isParticipant}, hasToken: ${!!joinAuthToken}`);
+
+            if (isCreator || isParticipant || !isPrivate || hasValidJoinToken) {
                 return res.status(200).json({
                     success: true,
                     status: "good",
                     statusCode: 200,
                     message: "Access granted",
-                    data: { accessGranted: true, roomId: chatroomId }
+                    data: {
+                        accessGranted: true,
+                        roomId: chatroomId,
+                        joinRequired: isPrivate && !isCreator && !isParticipant && hasValidJoinToken
+                    }
                 });
             }
 
-            res.status(403).json({
-                success: false,
-                status: "bad",
-                statusCode: 403,
-                message: "This is a private room. You need a valid invite link to join.",
-                data: { accessGranted: false }
+            return res.status(200).json({
+                success: true,
+                status: "good",
+                statusCode: 200,
+                message: "Room is private. Join required.",
+                data: { accessGranted: true, roomId: chatroomId, joinRequired: true }
             });
         } catch (error: any) {
             res.status(400).json({
@@ -141,7 +158,7 @@ export class ChatController {
     async getMessages(req: Request, res: Response) {
         try {
             const { chatroomId } = req.params;
-            const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+            const limit = req.query.limit ? Number.parseInt(req.query.limit as string) : undefined;
             const before = typeof req.query.before === "string" ? req.query.before : undefined;
             const result = await this.getMessageHistoryUseCase.execute({
                 conversationId: chatroomId as string,
@@ -226,7 +243,7 @@ export class ChatController {
                         roomname: r.roomName,
                         description: r.description || "",
                         hostAid: r.hostAid,
-                        participantCount: 0, // Placeholder
+                        participantCount: r.participantCount,
                         lastMessage: null,
                         isLocked: r.isLocked,
                         isPrivate: r.isPrivate
@@ -247,7 +264,7 @@ export class ChatController {
                 roomname: r.roomName,
                 description: r.description || "",
                 hostAid: r.hostAid,
-                participantCount: 0,
+                participantCount: r.participantCount,
                 lastMessage: null,
                 isLocked: r.isLocked,
                 isPrivate: r.isPrivate
@@ -259,6 +276,36 @@ export class ChatController {
                 statusCode: 200,
                 message: "Public rooms retrieved",
                 data: mapped
+            });
+        } catch (error: any) {
+            res.status(400).json({
+                success: false,
+                status: "bad",
+                statusCode: 400,
+                message: error.message
+            });
+        }
+    }
+
+    async validateShareLink(req: Request, res: Response) {
+        try {
+            const { token } = req.body;
+            if (!token) throw new Error("Token is required");
+
+            const chatroomId = token;
+            const room = await this.getChatroomDetailsUseCase.execute({ chatroomId });
+
+            res.status(200).json({
+                success: true,
+                status: "good",
+                statusCode: 200,
+                message: "Invite link validated",
+                data: {
+                    chatroomId: room.roomId,
+                    roomname: room.roomname,
+                    isPrivate: room.isPrivate,
+                    joinAuthToken: `guest-access-${room.roomId}-${Date.now()}`
+                }
             });
         } catch (error: any) {
             res.status(400).json({
