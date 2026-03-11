@@ -37,6 +37,12 @@ import { GetChatroomDetailsUseCase } from "./application/use-cases/GetChatroomDe
 import { SaveRoomKeyUseCase } from "./application/use-cases/SaveRoomKey";
 import { SSEService } from "./presentation/sse/SSEService";
 
+import { RedeemVoucherUseCase } from "./application/use-cases/RedeemVoucher";
+import { PostgresTransactionRepository } from "./data/repositories/PostgresTransactionRepository";
+import { PostgresVoucherRepository } from "./data/repositories/PostgresVoucherRepository";
+import { PaymentController } from "./presentation/controllers/PaymentController";
+import { createPaymentRoutes } from "./presentation/routes/paymentRoutes";
+
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5001;
@@ -53,6 +59,8 @@ const apiKeyRepo = new PostgresApiKeyRepository();
 const participantRepo = new PostgresParticipantRepository();
 const sessionRepo = new PostgresSessionRepository();
 const challengeStore = new RedisChallengeStore();
+const transactionRepo = new PostgresTransactionRepository();
+const voucherRepo = new PostgresVoucherRepository();
 
 const conversationLogic = new ConversationLogic(conversationRepo);
 const identityLogic = new IdentityLogic(identityRepo);
@@ -75,6 +83,7 @@ const leaveRoomUseCase = new LeaveRoomUseCase(participantRepo, eventEmitter);
 
 const generateChallengeUseCase = new GenerateChallengeUseCase(challengeStore);
 const verifyIdentityUseCase = new VerifyIdentityUseCase(challengeStore, sessionRepo, identityRepo);
+const redeemVoucherUseCase = new RedeemVoucherUseCase(voucherRepo, identityRepo, eventEmitter);
 
 const chatController = new ChatController(
     createRoomUseCase,
@@ -88,6 +97,7 @@ const chatController = new ChatController(
 
 const authController = new AuthController(generateChallengeUseCase, verifyIdentityUseCase, identityRepo);
 const adminController = new AdminController(apiKeyRepo);
+const paymentController = new PaymentController(redeemVoucherUseCase);
 
 const wsAdapter = new WebSocketAdapter(
     eventEmitter,
@@ -106,6 +116,7 @@ const wsAdapter = new WebSocketAdapter(
 
 app.use("/api/v1/auth", createAuthRoutes(authController, sessionRepo));
 app.use("/api/v1/admin", createAdminRoutes(adminController));
+app.use("/api/v1/payments", createPaymentRoutes(paymentController, sessionRepo));
 app.use("/api/v1", chatRoutes(chatController, apiKeyRepo, sessionRepo));
 
 wsAdapter.listen(server);

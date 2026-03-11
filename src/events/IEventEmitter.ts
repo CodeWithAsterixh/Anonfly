@@ -13,4 +13,5 @@ export const Events = {
     CONVERSATION_CREATED: "ConversationCreated",
     PARTICIPANT_JOINED: "ParticipantJoined",
     PARTICIPANT_LEFT: "ParticipantLeft",
+    IDENTITY_UPDATED: "IdentityUpdated",
 };

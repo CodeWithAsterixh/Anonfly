@@ -385,6 +385,19 @@ export class WebSocketAdapter {
                 });
             }
         });
+
+        this.eventEmitter.on(Events.IDENTITY_UPDATED, (data) => {
+            console.log(`[WS-Event] Broadcasting identity update for ${data.userAid}`);
+            // Find all Sockets belonging to this identityId
+            this.wsIdentities.forEach((idData, ws) => {
+                if (idData.identityId === data.identityId && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: "premiumUpdated",
+                        allowedFeatures: data.allowedFeatures
+                    }));
+                }
+            });
+        });
     }
 
     private broadcastUpdate(messageId: string, data: any) {
