@@ -38,6 +38,7 @@ export class IdentityLogic {
                 username,
                 identity.publicKey,
                 identity.exchangePublicKey,
+                identity.allowedFeatures,
                 identity.createdAt,
                 new Date()
             );
@@ -58,6 +59,7 @@ export class IdentityLogic {
             identity.username,
             publicKey,
             exchangePublicKey,
+            identity.allowedFeatures,
             identity.createdAt,
             new Date()
         );

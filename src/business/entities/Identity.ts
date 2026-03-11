@@ -5,6 +5,7 @@ export class Identity {
         public readonly username?: string,
         public readonly publicKey?: string,
         public readonly exchangePublicKey?: string,
+        public readonly allowedFeatures: string[] = [],
         public readonly createdAt: Date = new Date(),
         public readonly updatedAt: Date = new Date()
     ) { }

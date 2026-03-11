@@ -71,7 +71,8 @@ export class VerifyIdentityUseCase {
                 uuidv4(),
                 input.username,
                 input.publicKey,
-                input.exchangePublicKey
+                input.exchangePublicKey,
+                ["create_room", "large_files", "no_ads"] // Default features for new users
             );
             identity = await this.identityRepository.save(identity);
         }
@@ -86,7 +87,8 @@ export class VerifyIdentityUseCase {
             token,
             aid: identity.userAid,
             username: identity.username,
-            identityId: identity.id
+            identityId: identity.id,
+            allowedFeatures: identity.allowedFeatures
         };
     }
 }

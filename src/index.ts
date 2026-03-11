@@ -86,7 +86,7 @@ const chatController = new ChatController(
     sseService
 );
 
-const authController = new AuthController(generateChallengeUseCase, verifyIdentityUseCase);
+const authController = new AuthController(generateChallengeUseCase, verifyIdentityUseCase, identityRepo);
 const adminController = new AdminController(apiKeyRepo);
 
 const wsAdapter = new WebSocketAdapter(

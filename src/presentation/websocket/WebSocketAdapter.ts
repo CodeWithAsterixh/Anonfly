@@ -118,8 +118,7 @@ export class WebSocketAdapter {
             identityId
         });
         
-        const { userAid, username, publicKey, exchangePublicKey } = await this.identityLogic.getIdentityById(identityId);
-        const allowedFeatures: string[] = []; // Placeholder or fetch from somewhere else if needed
+        const { userAid, username, publicKey, exchangePublicKey, allowedFeatures } = await this.identityLogic.getIdentityById(identityId);
 
         console.log(`[WS] Joining room: ${chatroomId} for user: ${userAid}`);
         

@@ -17,10 +17,10 @@ export class PostgresIdentityRepository implements IIdentityRepository {
 
     async save(identity: Identity): Promise<Identity> {
         const res = await db.query(
-            `INSERT INTO identities (user_aid, username, public_key, exchange_public_key)
-       VALUES ($1, $2, $3, $4)
+            `INSERT INTO identities (user_aid, username, public_key, exchange_public_key, allowed_features)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-            [identity.userAid, identity.username, identity.publicKey, identity.exchangePublicKey]
+            [identity.userAid, identity.username, identity.publicKey, identity.exchangePublicKey, identity.allowedFeatures]
         );
         return this.mapToEntity(res.rows[0]);
     }
@@ -28,10 +28,10 @@ export class PostgresIdentityRepository implements IIdentityRepository {
     async update(identity: Identity): Promise<Identity> {
         const res = await db.query(
             `UPDATE identities 
-       SET username = $2, public_key = $3, exchange_public_key = $4, updated_at = CURRENT_TIMESTAMP
+       SET username = $2, public_key = $3, exchange_public_key = $4, allowed_features = $5, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1
        RETURNING *`,
-            [identity.id, identity.username, identity.publicKey, identity.exchangePublicKey]
+            [identity.id, identity.username, identity.publicKey, identity.exchangePublicKey, identity.allowedFeatures]
         );
         return this.mapToEntity(res.rows[0]);
     }
@@ -43,6 +43,7 @@ export class PostgresIdentityRepository implements IIdentityRepository {
             row.username,
             row.public_key,
             row.exchange_public_key,
+            row.allowed_features || [],
             row.created_at,
             row.updated_at
         );
