@@ -91,6 +91,9 @@ export class WebSocketAdapter {
                 case "roomKeyShare":
                     this.handleRoomKeyShare(ws, message);
                     break;
+                case "rotateKey":
+                    await this.handleRotateKey(ws, message);
+                    break;
                 case "ping":
                     ws.send(JSON.stringify({ type: "pong", timestamp: new Date().toISOString() }));
                     break;
@@ -136,6 +139,19 @@ export class WebSocketAdapter {
         const messages = await this.getMessageHistoryUseCase.execute({ conversationId: chatroomId, limit: 50 });
         console.log(`[WS] Details fetched. Sending joinSuccess for ${chatroomId}`);
 
+        // Compute creator online status
+        let isCreatorOnline = false;
+        const sockets = this.clients.get(chatroomId);
+        if (sockets) {
+            for (const s of sockets.values()) {
+                const idData = this.wsIdentities.get(s);
+                if (idData?.userAid && idData.userAid === room.creatorAid) {
+                    isCreatorOnline = true;
+                    break;
+                }
+            }
+        }
+
         // 4. Send joinSuccess to the joining client
         ws.send(JSON.stringify({
             type: "joinSuccess",
@@ -144,7 +160,7 @@ export class WebSocketAdapter {
             roomKeyIv: room.roomKeyIv,
             hostAid: room.hostAid,
             creatorAid: room.creatorAid,
-            isCreatorOnline: true, // Simplified
+            isCreatorOnline,
             participants: room.participants,
             cachedMessages: messages.map(m => ({
                 id: m.id,
@@ -252,6 +268,31 @@ export class WebSocketAdapter {
             targetAid,
             encryptedKey,
             iv
+        });
+    }
+
+    private async handleRotateKey(ws: WebSocket, data: any) {
+        const { chatroomId, keys } = data as { chatroomId: string, keys: Record<string, { ciphertext: string, iv: string }> };
+        if (!chatroomId || !keys) return;
+        const identityData = this.wsIdentities.get(ws);
+        const hostAid = identityData?.userAid;
+
+        const sockets = this.clients.get(chatroomId);
+        if (!sockets) return;
+
+        sockets.forEach((clientWs) => {
+            const idData = this.wsIdentities.get(clientWs);
+            if (!idData?.userAid) return;
+            const encryptedKey = keys[idData.userAid];
+            if (!encryptedKey) return;
+            if (clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(JSON.stringify({
+                    type: "rotateKey",
+                    chatroomId,
+                    hostAid,
+                    encryptedKey
+                }));
+            }
         });
     }
 

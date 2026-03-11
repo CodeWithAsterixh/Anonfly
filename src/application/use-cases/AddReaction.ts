@@ -20,8 +20,8 @@ export class AddReactionUseCase {
     async execute(input: AddReactionInput) {
         const identity = await this.identityLogic.getOrCreateIdentity(input.userAid);
 
-        const message = await this.messageLogic.messageRepo.findById(input.messageId);
-        if (!message) return;
+        const msgBefore = await this.messageLogic.messageRepo.findById(input.messageId);
+        if (!msgBefore) return;
 
         await this.messageLogic.addReaction(
             input.messageId,
@@ -31,14 +31,13 @@ export class AddReactionUseCase {
             input.emojiType
         );
 
-        this.eventEmitter.emit(Events.REACTION_ADDED, {
-            messageId: input.messageId,
-            conversationId: message.conversationId,
-            userAid: input.userAid,
-            username: identity.username,
-            emojiId: input.emojiId,
-            emojiValue: input.emojiValue,
-            emojiType: input.emojiType
-        });
+        const msgAfter = await this.messageLogic.messageRepo.findById(input.messageId);
+        if (msgAfter) {
+            this.eventEmitter.emit(Events.REACTION_ADDED, {
+                messageId: input.messageId,
+                conversationId: msgAfter.conversationId,
+                reactions: msgAfter.reactions
+            });
+        }
     }
 }
