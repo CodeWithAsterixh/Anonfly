@@ -100,7 +100,8 @@ const wsAdapter = new WebSocketAdapter(
     getMessageHistoryUseCase,
     saveRoomKeyUseCase,
     leaveRoomUseCase,
-    sessionRepo
+    sessionRepo,
+    identityLogic
 );
 
 app.use("/api/v1/auth", createAuthRoutes(authController, sessionRepo));

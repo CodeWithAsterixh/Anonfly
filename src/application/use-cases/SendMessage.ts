@@ -4,9 +4,7 @@ import { IEventEmitter, Events } from "../../events/IEventEmitter";
 
 export interface SendMessageInput {
     conversationId: string;
-    senderAid: string;
-    identityId?: string;
-    username?: string;
+    identityId: string;
     content: string;
     signature?: string;
     replyToId?: string;
@@ -20,19 +18,11 @@ export class SendMessageUseCase {
     ) { }
 
     async execute(input: SendMessageInput) {
-        // 1. Ensure/Update sender identity
-        let senderId: string;
-        let senderAid = input.senderAid;
-        let senderUsername = input.username;
-
-        if (input.identityId) {
-            senderId = input.identityId;
-        } else {
-            const sender = await this.identityLogic.getOrCreateIdentity(input.senderAid, input.username);
-            senderId = sender.id!;
-            senderAid = sender.userAid;
-            senderUsername = sender.username;
-        }
+        // 1. Get verified sender identity
+        const sender = await this.identityLogic.getIdentityById(input.identityId);
+        const senderId = sender.id!;
+        const senderAid = sender.userAid;
+        const senderUsername = sender.username;
 
         // 2. Persist message
         const message = await this.messageLogic.sendMessage(

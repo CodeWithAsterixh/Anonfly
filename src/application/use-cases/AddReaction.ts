@@ -4,7 +4,7 @@ import { IEventEmitter, Events } from "../../events/IEventEmitter";
 
 export interface AddReactionInput {
     messageId: string;
-    userAid: string;
+    identityId: string;
     emojiId: string;
     emojiValue: string;
     emojiType: string;
@@ -18,7 +18,7 @@ export class AddReactionUseCase {
     ) { }
 
     async execute(input: AddReactionInput) {
-        const identity = await this.identityLogic.getOrCreateIdentity(input.userAid);
+        const identity = await this.identityLogic.getIdentityById(input.identityId);
 
         const msgBefore = await this.messageLogic.messageRepo.findById(input.messageId);
         if (!msgBefore) return;

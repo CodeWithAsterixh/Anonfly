@@ -10,6 +10,7 @@ import { JoinRoomUseCase } from "../../application/use-cases/JoinRoom";
 import { LeaveRoomUseCase } from "../../application/use-cases/LeaveRoom";
 import { SaveRoomKeyUseCase } from "../../application/use-cases/SaveRoomKey";
 import { SendMessageUseCase } from "../../application/use-cases/SendMessage";
+import { IdentityLogic } from "../../business/logic/IdentityLogic";
 import { ISessionRepository } from "../../business/logic/interfaces/ISessionRepository";
 import { Events, IEventEmitter } from "../../events/IEventEmitter";
 
@@ -30,7 +31,8 @@ export class WebSocketAdapter {
         private readonly getMessageHistoryUseCase: GetMessageHistoryUseCase,
         private readonly saveRoomKeyUseCase: SaveRoomKeyUseCase,
         private readonly leaveRoomUseCase: LeaveRoomUseCase,
-        private readonly sessionRepository: ISessionRepository
+        private readonly sessionRepository: ISessionRepository,
+        private readonly identityLogic: IdentityLogic
     ) {
         this.setupEventListeners();
     }
@@ -107,25 +109,25 @@ export class WebSocketAdapter {
     }
 
     private async handleJoinRoom(ws: WebSocket, data: any, identityId?: string) {
-        const { chatroomId, userAid, username, publicKey, exchangePublicKey, allowedFeatures } = data;
+        if (!identityId) throw new Error("Authentication required to join room");
+        const { chatroomId } = data;
 
-        console.log(`[WS] Joining room: ${chatroomId} for user: ${userAid}`);
         // 1. Persist participation
-        await this.joinRoomUseCase.execute({
+        const result = await this.joinRoomUseCase.execute({
             conversationId: chatroomId,
-            userAid,
-            publicKey,
             identityId
         });
-        console.log(`[WS] Participation persisted for ${userAid} in ${chatroomId}`);
+        
+        const { userAid, username, publicKey, exchangePublicKey } = await this.identityLogic.getIdentityById(identityId);
+        const allowedFeatures: string[] = []; // Placeholder or fetch from somewhere else if needed
 
-        if (identityId) {
-            this.wsIdentities.set(ws, { identityId, userAid, username: username || "Anonymous" });
-            if (!this.wsRooms.has(ws)) {
-                this.wsRooms.set(ws, new Set());
-            }
-            this.wsRooms.get(ws)!.add(chatroomId);
+        console.log(`[WS] Joining room: ${chatroomId} for user: ${userAid}`);
+        
+        this.wsIdentities.set(ws, { identityId, userAid, username: username || "Anonymous" });
+        if (!this.wsRooms.has(ws)) {
+            this.wsRooms.set(ws, new Set());
         }
+        this.wsRooms.get(ws)!.add(chatroomId);
 
         // 2. Track connection for broadcasting
         if (!this.clients.has(chatroomId)) {
@@ -190,12 +192,11 @@ export class WebSocketAdapter {
     }
 
     private async handleChatMessage(ws: WebSocket, data: any, identityId?: string) {
-        const { chatroomId, content, userAid, username, signature } = data;
+        if (!identityId) throw new Error("Authentication required to send message");
+        const { chatroomId, content, signature } = data;
 
         await this.sendMessageUseCase.execute({
             conversationId: chatroomId,
-            senderAid: userAid,
-            username,
             content,
             signature,
             identityId
@@ -203,20 +204,23 @@ export class WebSocketAdapter {
     }
 
     private async handleEditMessage(ws: WebSocket, data: any, identityId?: string) {
+        if (!identityId) throw new Error("Authentication required to edit message");
         const { messageId, newContent } = data;
         await this.editMessageUseCase.execute({ messageId, content: newContent });
     }
 
     private async handleDeleteMessage(ws: WebSocket, data: any, identityId?: string) {
+        if (!identityId) throw new Error("Authentication required to delete message");
         const { messageId } = data;
         await this.deleteMessageUseCase.execute({ messageId });
     }
 
     private async handleReaction(ws: WebSocket, data: any, identityId?: string) {
-        const { messageId, userAid, emojiId, emojiValue, emojiType } = data;
+        if (!identityId) throw new Error("Authentication required to add reaction");
+        const { messageId, emojiId, emojiValue, emojiType } = data;
         await this.addReactionUseCase.execute({
             messageId,
-            userAid,
+            identityId,
             emojiId,
             emojiValue,
             emojiType

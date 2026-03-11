@@ -8,10 +8,7 @@ import { Events, IEventEmitter } from "../../events/IEventEmitter";
 export interface JoinRoomRequest {
     roomName?: string;
     conversationId?: string;
-    userAid: string;
-    identityId?: string;
-    username?: string;
-    publicKey?: string;
+    identityId: string;
     encryptedSessionKey?: string;
 }
 
@@ -33,18 +30,9 @@ export class JoinRoomUseCase {
 
         if (!conversation) throw new Error("Conversation not found");
 
-        let identityId = request.identityId;
-
-        if (!identityId) {
-            let identity = await this.identityRepo.findByAid(request.userAid);
-            identity ??= await this.identityRepo.save(new Identity(
-                request.userAid,
-                undefined,
-                request.username || undefined,
-                request.publicKey || undefined
-            ));
-            identityId = identity.id!;
-        }
+        const identityId = request.identityId;
+        const identity = await this.identityRepo.findById(identityId);
+        if (!identity) throw new Error("Identity not found");
 
         const existingParticipant = await this.participantRepo.findByConversationAndIdentity(
             conversation.id,

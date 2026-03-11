@@ -25,8 +25,26 @@ export class VerifyIdentityUseCase {
         const nonce = await this.challengeStore.get(input.aid);
         if (!nonce) throw new Error("Challenge expired or not found");
 
-        // Verify signature (Ed25519)
+        // 1. Verify AID-PublicKey binding (Prevent spoofing and squatting)
         const pubKeyBuffer = Buffer.from(input.publicKey, "base64");
+        const computedAid = crypto.createHash("sha256").update(pubKeyBuffer).digest("hex");
+        if (computedAid !== input.aid) {
+            throw new Error("Invalid AID-PublicKey binding");
+        }
+
+        // 2. Determine which public key to use for signature verification
+        let identity = await this.identityRepository.findByAid(input.aid);
+        let verificationPubKey: Buffer;
+
+        if (identity && identity.publicKey) {
+            // Use stored public key for existing accounts to prevent takeover
+            verificationPubKey = Buffer.from(identity.publicKey, "base64");
+        } else {
+            // First time login, use the provided (and verified) public key
+            verificationPubKey = pubKeyBuffer;
+        }
+
+        // 3. Verify signature (Ed25519)
         const signatureBuffer = Buffer.from(input.signature, "base64");
         const nonceBuffer = Buffer.from(nonce, "utf8");
 
@@ -34,7 +52,7 @@ export class VerifyIdentityUseCase {
             undefined, // algorithm is inferred from key type
             nonceBuffer,
             {
-                key: pubKeyBuffer,
+                key: verificationPubKey,
                 format: "der",
                 type: "spki",
             },
@@ -46,12 +64,11 @@ export class VerifyIdentityUseCase {
         // Cleanup challenge
         await this.challengeStore.delete(input.aid);
 
-        // Upsert Identity
-        let identity = await this.identityRepository.findByAid(input.aid);
+        // 4. Save Identity if it's new
         if (!identity) {
             identity = new Identity(
                 input.aid,
-                undefined,
+                uuidv4(),
                 input.username,
                 input.publicKey,
                 input.exchangePublicKey
