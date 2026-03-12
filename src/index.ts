@@ -47,7 +47,6 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5001;
 
-app.use(express.json());
 app.use(cors());
 app.use(pinoHttp());
 
@@ -97,7 +96,7 @@ const chatController = new ChatController(
 
 const authController = new AuthController(generateChallengeUseCase, verifyIdentityUseCase, identityRepo);
 const adminController = new AdminController(apiKeyRepo);
-const paymentController = new PaymentController(redeemVoucherUseCase);
+const paymentController = new PaymentController(redeemVoucherUseCase, transactionRepo, voucherRepo);
 
 const wsAdapter = new WebSocketAdapter(
     eventEmitter,
@@ -113,6 +112,12 @@ const wsAdapter = new WebSocketAdapter(
     sessionRepo,
     identityLogic
 );
+
+app.use(express.json({
+    verify: (req: any, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 
 app.use("/api/v1/auth", createAuthRoutes(authController, sessionRepo));
 app.use("/api/v1/admin", createAdminRoutes(adminController));
