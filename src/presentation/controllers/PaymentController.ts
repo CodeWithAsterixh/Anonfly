@@ -5,6 +5,8 @@ import { ITransactionRepository } from "../../business/logic/interfaces/ITransac
 import { IVoucherRepository } from "../../business/logic/interfaces/IVoucherRepository";
 import { Transaction } from "../../business/entities/Transaction";
 import { v4 as uuidv4 } from "uuid";
+import { sendMail } from "../../infrastructure/email/sendMail";
+import { formatManualPaymentNotification } from "../../infrastructure/email/formatMail/manualPayment";
 
 const stripe = new Stripe(process.env.STRIPE_API_KEY || "", {
     apiVersion: "2025-02-24.acacia" as any,
@@ -57,6 +59,26 @@ export class PaymentController {
             );
 
             const savedTransaction = await this.transactionRepo.save(transaction);
+
+            // Send notification email to admin
+            const adminEmail = process.env.SMTP_USER;
+            if (adminEmail) {
+                const mailHtml = formatManualPaymentNotification({
+                    userAid: session.identityAid || "Unknown",
+                    amount: amount || 5, // Default to $5
+                    token: currency || "USDT",
+                    proof: proof,
+                    transactionId: savedTransaction.id || "Unknown"
+                });
+
+                await sendMail({
+                    subject: `New Manual Payment Proof: ${currency || "USDT"} - from ${session.identityAid || "Unknown"}`,
+                    html: mailHtml,
+                    mailTo: adminEmail
+                }).catch(err => {
+                    console.error("Failed to send admin notification email:", err);
+                });
+            }
 
             res.status(200).json({
                 success: true,
