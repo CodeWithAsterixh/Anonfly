@@ -21,13 +21,16 @@ import { PostgresIdentityRepository } from "./data/repositories/PostgresIdentity
 import { PostgresMessageRepository } from "./data/repositories/PostgresMessageRepository";
 import { PostgresParticipantRepository } from "./data/repositories/PostgresParticipantRepository";
 import { PostgresSessionRepository } from "./data/repositories/PostgresSessionRepository";
+import { PostgresNotificationRepository } from "./data/repositories/PostgresNotificationRepository";
 import { LocalEventEmitter } from "./events/publishers/LocalEventEmitter";
 import { AdminController } from "./presentation/controllers/AdminController";
 import { AuthController } from "./presentation/controllers/AuthController";
 import { ChatController } from "./presentation/controllers/ChatController";
+import { NotificationController } from "./presentation/controllers/NotificationController";
 import { createAdminRoutes } from "./presentation/routes/adminRoutes";
 import { createAuthRoutes } from "./presentation/routes/authRoutes";
 import { chatRoutes } from "./presentation/routes/chatRoutes";
+import { createNotificationRoutes } from "./presentation/routes/notificationRoutes";
 import { WebSocketAdapter } from "./presentation/websocket/WebSocketAdapter";
 
 import { AddReactionUseCase } from "./application/use-cases/AddReaction";
@@ -60,6 +63,7 @@ const sessionRepo = new PostgresSessionRepository();
 const challengeStore = new RedisChallengeStore();
 const transactionRepo = new PostgresTransactionRepository();
 const voucherRepo = new PostgresVoucherRepository();
+const notificationRepo = new PostgresNotificationRepository();
 
 const conversationLogic = new ConversationLogic(conversationRepo);
 const identityLogic = new IdentityLogic(identityRepo);
@@ -97,6 +101,7 @@ const chatController = new ChatController(
 const authController = new AuthController(generateChallengeUseCase, verifyIdentityUseCase, identityRepo);
 const adminController = new AdminController(apiKeyRepo, transactionRepo, voucherRepo, redeemVoucherUseCase);
 const paymentController = new PaymentController(redeemVoucherUseCase, transactionRepo, voucherRepo);
+const notificationController = new NotificationController(notificationRepo);
 
 const wsAdapter = new WebSocketAdapter(
     eventEmitter,
@@ -122,6 +127,7 @@ app.use(express.json({
 app.use("/api/v1/auth", createAuthRoutes(authController, sessionRepo));
 app.use("/api/v1/admin", createAdminRoutes(adminController));
 app.use("/api/v1/payments", createPaymentRoutes(paymentController, sessionRepo));
+app.use("/api/v1/notifications", createNotificationRoutes(notificationController, sessionRepo));
 app.use("/api/v1", chatRoutes(chatController, apiKeyRepo, sessionRepo));
 
 wsAdapter.listen(server);

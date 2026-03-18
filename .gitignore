@@ -17,3 +17,4 @@ Thumbs.db
 *.log
 ws_error.txt
 *.txt.bak
+/scripts
