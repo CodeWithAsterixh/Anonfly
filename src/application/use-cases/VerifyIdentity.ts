@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import { IChallengeStore } from "../../data/database/RedisChallengeStore";
 import { ISessionRepository } from "../../business/logic/interfaces/ISessionRepository";
@@ -36,7 +36,7 @@ export class VerifyIdentityUseCase {
         let identity = await this.identityRepository.findByAid(input.aid);
         let verificationPubKey: Buffer;
 
-        if (identity && identity.publicKey) {
+        if (identity?.publicKey) {
             // Use stored public key for existing accounts to prevent takeover
             verificationPubKey = Buffer.from(identity.publicKey, "base64");
         } else {
@@ -88,6 +88,7 @@ export class VerifyIdentityUseCase {
             aid: identity.userAid,
             username: identity.username,
             identityId: identity.id,
+            isPremium: identity.isPremium,
             allowedFeatures: identity.allowedFeatures
         };
     }
