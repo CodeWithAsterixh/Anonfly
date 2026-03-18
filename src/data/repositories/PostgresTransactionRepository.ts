@@ -15,10 +15,15 @@ export class PostgresTransactionRepository implements ITransactionRepository {
         return this.mapToEntity(res.rows[0]);
     }
 
+    async findByStatus(status: string): Promise<Transaction[]> {
+        const res = await db.query("SELECT * FROM transactions WHERE status = $1", [status]);
+        return res.rows.map(row => this.mapToEntity(row));
+    }
+
     async save(transaction: Transaction): Promise<Transaction> {
         const res = await db.query(
-            `INSERT INTO transactions (identity_id, provider_transaction_id, provider, amount, currency, status, metadata)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `INSERT INTO transactions (identity_id, provider_transaction_id, provider, amount, currency, status, metadata, proof)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING *`,
             [
                 transaction.identityId,
@@ -27,7 +32,8 @@ export class PostgresTransactionRepository implements ITransactionRepository {
                 transaction.amount,
                 transaction.currency,
                 transaction.status,
-                JSON.stringify(transaction.metadata)
+                JSON.stringify(transaction.metadata),
+                transaction.proof
             ]
         );
         return this.mapToEntity(res.rows[0]);
@@ -52,6 +58,7 @@ export class PostgresTransactionRepository implements ITransactionRepository {
             row.status,
             row.id,
             row.identity_id,
+            row.proof,
             row.currency,
             row.metadata,
             row.created_at,

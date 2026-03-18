@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     provider TEXT NOT NULL, -- 'monero', 'lightning', 'stripe'
     amount DECIMAL NOT NULL,
     currency TEXT DEFAULT 'USD',
-    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'completed', 'failed'
+    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'completed', 'failed', 'awaiting_review'
+    proof TEXT, -- For manual transactions, store hash or proof text
     metadata JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

@@ -95,7 +95,7 @@ const chatController = new ChatController(
 );
 
 const authController = new AuthController(generateChallengeUseCase, verifyIdentityUseCase, identityRepo);
-const adminController = new AdminController(apiKeyRepo);
+const adminController = new AdminController(apiKeyRepo, transactionRepo, voucherRepo, redeemVoucherUseCase);
 const paymentController = new PaymentController(redeemVoucherUseCase, transactionRepo, voucherRepo);
 
 const wsAdapter = new WebSocketAdapter(

@@ -22,5 +22,10 @@ export const createAdminRoutes = (adminController: AdminController): Router => {
     router.patch("/keys/:id", (req, res) => adminController.toggleApiKey(req, res));
     router.delete("/keys/:id", (req, res) => adminController.deleteApiKey(req, res));
 
+    // Manual Transaction Review
+    router.get("/transactions/pending", (req, res) => adminController.listPendingTransactions(req, res));
+    router.post("/transactions/:id/approve", (req, res) => adminController.approveTransaction(req, res));
+    router.post("/transactions/:id/reject", (req, res) => adminController.rejectTransaction(req, res));
+
     return router;
 };

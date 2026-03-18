@@ -60,6 +60,11 @@ export class WebSocketAdapter {
                 if (session) {
                     identityId = session.identityId;
                 }
+            } else {
+                const identity = this.wsIdentities.get(ws);
+                if (identity) {
+                    identityId = identity.identityId;
+                }
             }
 
             switch (type) {
@@ -192,13 +197,14 @@ export class WebSocketAdapter {
 
     private async handleChatMessage(ws: WebSocket, data: any, identityId?: string) {
         if (!identityId) throw new Error("Authentication required to send message");
-        const { chatroomId, content, signature } = data;
+        const { chatroomId, content, signature, replyToId } = data;
 
         await this.sendMessageUseCase.execute({
             conversationId: chatroomId,
             content,
             signature,
-            identityId
+            identityId,
+            replyToId
         });
     }
 
