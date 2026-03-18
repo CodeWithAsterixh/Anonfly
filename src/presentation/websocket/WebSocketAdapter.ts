@@ -118,15 +118,15 @@ export class WebSocketAdapter {
         const { chatroomId } = data;
 
         // 1. Persist participation
-        const result = await this.joinRoomUseCase.execute({
+        await this.joinRoomUseCase.execute({
             conversationId: chatroomId,
             identityId
         });
-        
+
         const { userAid, username, publicKey, exchangePublicKey, allowedFeatures } = await this.identityLogic.getIdentityById(identityId);
 
         console.log(`[WS] Joining room: ${chatroomId} for user: ${userAid}`);
-        
+
         this.wsIdentities.set(ws, { identityId, userAid, username: username || "Anonymous" });
         if (!this.wsRooms.has(ws)) {
             this.wsRooms.set(ws, new Set());
@@ -142,7 +142,7 @@ export class WebSocketAdapter {
         // 3. Get room details and history
         console.log(`[WS] Fetching room details and history for ${chatroomId}`);
         const room = await this.getChatroomDetailsUseCase.execute({ chatroomId });
-        const messages = await this.getMessageHistoryUseCase.execute({ conversationId: chatroomId, limit: 50 });
+        const messages = await this.getMessageHistoryUseCase.execute({ conversationId: chatroomId, limit: 50 }, identityId);
         console.log(`[WS] Details fetched. Sending joinSuccess for ${chatroomId}`);
 
         // Compute creator online status
@@ -177,7 +177,8 @@ export class WebSocketAdapter {
                 timestamp: m.timestamp.toISOString(),
                 isEdited: m.isEdited,
                 isDeleted: m.isDeleted,
-                reactions: m.reactions
+                reactions: m.reactions,
+                replyTo: m.replyTo
             }))
         }));
 
@@ -211,13 +212,13 @@ export class WebSocketAdapter {
     private async handleEditMessage(ws: WebSocket, data: any, identityId?: string) {
         if (!identityId) throw new Error("Authentication required to edit message");
         const { messageId, newContent } = data;
-        await this.editMessageUseCase.execute({ messageId, content: newContent });
+        await this.editMessageUseCase.execute({ messageId, content: newContent, identityId });
     }
 
     private async handleDeleteMessage(ws: WebSocket, data: any, identityId?: string) {
         if (!identityId) throw new Error("Authentication required to delete message");
-        const { messageId } = data;
-        await this.deleteMessageUseCase.execute({ messageId });
+        const { messageId, mode } = data;
+        await this.deleteMessageUseCase.execute({ messageId, identityId, mode: mode || 'everyone' });
     }
 
     private async handleReaction(ws: WebSocket, data: any, identityId?: string) {
@@ -360,7 +361,7 @@ export class WebSocketAdapter {
                 timestamp: message.timestamp.toISOString ? message.timestamp.toISOString() : message.timestamp,
                 isEdited: message.isEdited,
                 isDeleted: message.isDeleted,
-                replyTo: message.replyToId ? { messageId: message.replyToId } : null,
+                replyTo: message.replyTo || (message.replyToId ? { messageId: message.replyToId } : null),
                 reactions: message.reactions || []
             });
         });

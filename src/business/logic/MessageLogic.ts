@@ -30,8 +30,12 @@ export class MessageLogic {
         return this.messageRepo.save(message);
     }
 
-    async getMessages(conversationId: string, limit?: number, before?: Date): Promise<Message[]> {
-        return this.messageRepo.findByConversationId(conversationId, limit, before);
+    async getMessages(conversationId: string, limit?: number, before?: Date, currentIdentityId?: string): Promise<Message[]> {
+        return this.messageRepo.findByConversationId(conversationId, limit, before, currentIdentityId);
+    }
+
+    async hideMessage(messageId: string, identityId: string): Promise<void> {
+        await this.messageRepo.hideForUser(messageId, identityId);
     }
 
     async editMessage(messageId: string, content: string): Promise<void> {

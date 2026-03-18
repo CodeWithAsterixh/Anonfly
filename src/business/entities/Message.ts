@@ -8,6 +8,13 @@ export class Reaction {
     ) { }
 }
 
+export interface ReplyTo {
+    messageId: string;
+    content: string;
+    senderUsername: string;
+    userAid: string;
+}
+
 export class Message {
     constructor(
         public readonly id: string,
@@ -22,6 +29,7 @@ export class Message {
         public readonly replyToId?: string,
         public readonly senderAid?: string,
         public readonly senderUsername?: string,
-        public readonly reactions: Reaction[] = []
+        public readonly reactions: Reaction[] = [],
+        public readonly replyTo?: ReplyTo | null
     ) { }
 }

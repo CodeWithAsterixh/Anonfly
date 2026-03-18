@@ -6,6 +6,7 @@ export class PostgresMessageRepository implements IMessageRepository {
     async findById(id: string): Promise<Message | null> {
         const res = await db.query(`
       SELECT m.*, i.user_aid as sender_aid, i.username as sender_username,
+      rm.content as reply_content, ri.user_aid as reply_sender_aid, ri.username as reply_sender_username,
       COALESCE(
           (SELECT json_agg(json_build_object(
               'userAid', ri.user_aid,
@@ -20,6 +21,8 @@ export class PostgresMessageRepository implements IMessageRepository {
       ) as reactions
       FROM messages m
       JOIN identities i ON m.sender_id = i.id
+      LEFT JOIN messages rm ON m.reply_to_id = rm.id
+      LEFT JOIN identities ri ON rm.sender_id = ri.id
       WHERE m.id = $1
     `, [id]);
 
@@ -38,33 +41,46 @@ export class PostgresMessageRepository implements IMessageRepository {
         return this.findById(res.rows[0].id) as Promise<Message>;
     }
 
-    async findByConversationId(conversationId: string, limit: number = 50, before?: Date): Promise<Message[]> {
-        let query = `
-      SELECT m.*, i.user_aid as sender_aid, i.username as sender_username,
-      COALESCE(
-          (SELECT json_agg(json_build_object(
-              'userAid', ri.user_aid,
-              'username', ri.username,
-              'emojiId', r.emoji_id,
-              'emojiValue', r.emoji_value,
-              'emojiType', r.emoji_type
-          )) FROM reactions r 
-           JOIN identities ri ON r.identity_id = ri.id
-           WHERE r.message_id = m.id
-          ), '[]'
-      ) as reactions
-      FROM messages m
-      JOIN identities i ON m.sender_id = i.id
-      WHERE m.conversation_id = $1
-    `;
+    async findByConversationId(conversationId: string, limit: number = 50, before?: Date, currentIdentityId?: string): Promise<Message[]> {
+        let whereClause = "m.conversation_id = $1";
         let params: any[] = [conversationId];
 
+        if (currentIdentityId) {
+            whereClause += ` AND NOT EXISTS (SELECT 1 FROM hidden_messages hm WHERE hm.message_id = m.id AND hm.identity_id = $${params.length + 1})`;
+            params.push(currentIdentityId);
+        }
+
         if (before) {
-            query += " AND m.timestamp < $2";
+            whereClause += ` AND m.timestamp < $${params.length + 1}`;
             params.push(before);
         }
 
-        query += ` ORDER BY m.sequence_id DESC LIMIT $${params.length + 1}`;
+        const query = `
+      SELECT * FROM (
+        SELECT m.*, i.user_aid as sender_aid, i.username as sender_username,
+        rm.content as reply_content, ri.user_aid as reply_sender_aid, ri.username as reply_sender_username,
+        COALESCE(
+            (SELECT json_agg(json_build_object(
+                'userAid', ri.user_aid,
+                'username', ri.username,
+                'emojiId', r.emoji_id,
+                'emojiValue', r.emoji_value,
+                'emojiType', r.emoji_type
+            )) FROM reactions r 
+             JOIN identities ri ON r.identity_id = ri.id
+             WHERE r.message_id = m.id
+            ), '[]'
+        ) as reactions
+        FROM messages m
+        JOIN identities i ON m.sender_id = i.id
+        LEFT JOIN messages rm ON m.reply_to_id = rm.id
+        LEFT JOIN identities ri ON rm.sender_id = ri.id
+        WHERE ${whereClause}
+        ORDER BY m.sequence_id DESC
+        LIMIT $${params.length + 1}
+      ) AS subquery
+      ORDER BY sequence_id ASC
+    `;
         params.push(limit);
 
         const res = await db.query(query, params);
@@ -80,7 +96,14 @@ export class PostgresMessageRepository implements IMessageRepository {
     }
 
     async softDelete(id: string): Promise<void> {
-        await db.query("UPDATE messages SET is_deleted = TRUE WHERE id = $1", [id]);
+        await db.query("UPDATE messages SET is_deleted = TRUE, content = '[This message was deleted]' WHERE id = $1", [id]);
+    }
+
+    async hideForUser(messageId: string, identityId: string): Promise<void> {
+        await db.query(
+            "INSERT INTO hidden_messages (message_id, identity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            [messageId, identityId]
+        );
     }
 
     async update(id: string, content: string, isEdited: boolean): Promise<void> {
@@ -104,6 +127,13 @@ export class PostgresMessageRepository implements IMessageRepository {
     }
 
     private mapToEntity(row: any): Message {
+        const replyTo = row.reply_to_id ? {
+            messageId: row.reply_to_id,
+            content: row.reply_content,
+            senderUsername: row.reply_sender_username || "Anonymous",
+            userAid: row.reply_sender_aid
+        } : null;
+
         return new Message(
             row.id,
             row.conversation_id,
@@ -117,7 +147,8 @@ export class PostgresMessageRepository implements IMessageRepository {
             row.reply_to_id,
             row.sender_aid,
             row.sender_username,
-            row.reactions || []
+            row.reactions || [],
+            replyTo
         );
     }
 }

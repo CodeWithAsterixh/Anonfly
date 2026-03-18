@@ -13,7 +13,7 @@ export class GetMessageHistoryUseCase {
         private readonly conversationRepo: IConversationRepository
     ) { }
 
-    async execute(request: GetMessageHistoryRequest) {
+    async execute(request: GetMessageHistoryRequest, identityId?: string) {
         const conversation = await this.conversationRepo.findById(request.conversationId);
         if (!conversation) throw new Error("Conversation not found");
 
@@ -21,7 +21,8 @@ export class GetMessageHistoryUseCase {
         const messages = await this.messageRepo.findByConversationId(
             request.conversationId,
             request.limit || 50,
-            beforeDate
+            beforeDate,
+            identityId
         );
 
         return messages;

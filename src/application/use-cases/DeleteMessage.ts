@@ -3,6 +3,8 @@ import { IEventEmitter, Events } from "../../events/IEventEmitter";
 
 export interface DeleteMessageInput {
     messageId: string;
+    identityId: string;
+    mode: 'everyone' | 'me';
 }
 
 export class DeleteMessageUseCase {
@@ -15,11 +17,18 @@ export class DeleteMessageUseCase {
         const message = await this.messageLogic.messageRepo.findById(input.messageId);
         if (!message) return;
 
-        await this.messageLogic.deleteMessage(input.messageId);
+        if (input.mode === 'everyone') {
+            if (message.senderId !== input.identityId) {
+                throw new Error("You can only delete your own messages for everyone.");
+            }
+            await this.messageLogic.deleteMessage(input.messageId);
 
-        this.eventEmitter.emit(Events.MESSAGE_DELETED, {
-            messageId: input.messageId,
-            conversationId: message.conversationId
-        });
+            this.eventEmitter.emit(Events.MESSAGE_DELETED, {
+                messageId: input.messageId,
+                conversationId: message.conversationId
+            });
+        } else {
+            await this.messageLogic.hideMessage(input.messageId, input.identityId);
+        }
     }
 }

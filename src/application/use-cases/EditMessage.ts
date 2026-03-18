@@ -4,6 +4,7 @@ import { IEventEmitter, Events } from "../../events/IEventEmitter";
 export interface EditMessageInput {
     messageId: string;
     content: string;
+    identityId: string;
 }
 
 export class EditMessageUseCase {
@@ -15,6 +16,10 @@ export class EditMessageUseCase {
     async execute(input: EditMessageInput) {
         const message = await this.messageLogic.messageRepo.findById(input.messageId);
         if (!message) return;
+
+        if (message.senderId !== input.identityId) {
+            throw new Error("You can only edit your own messages.");
+        }
 
         await this.messageLogic.editMessage(input.messageId, input.content);
 
