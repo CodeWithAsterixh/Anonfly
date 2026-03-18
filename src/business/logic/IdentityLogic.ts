@@ -34,11 +34,12 @@ export class IdentityLogic {
         } else if (username && identity.username !== username) {
             const updatedIdentity = new Identity(
                 identity.userAid,
-                identity.id!,
+                identity.id,
                 username,
                 identity.publicKey,
                 identity.exchangePublicKey,
                 identity.allowedFeatures,
+                identity.isPremium,
                 identity.createdAt,
                 new Date()
             );
@@ -55,11 +56,12 @@ export class IdentityLogic {
 
         const updatedIdentity = new Identity(
             identity.userAid,
-            identity.id!,
+            identity.id,
             identity.username,
             publicKey,
             exchangePublicKey,
             identity.allowedFeatures,
+            identity.isPremium,
             identity.createdAt,
             new Date()
         );
